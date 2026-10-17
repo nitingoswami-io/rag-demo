@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RAG Demo Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Kalam:wght@400;700&display=swap">
+<style>
+/* Layout: engineer's notebook spec. Sticky index left, one reading column, hand-sketched diagrams on dot-grid paper. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #17202b;
+  --muted: #5b6676;
+  --rule: #dde2e8;
+  --accent: #0f766e;
+  --accent-soft: #d9f0ec;
+  --hl: #fbe9a6;
+  --code-bg: #eef1f4;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-hand: "Kalam", "Comic Sans MS", "Bradley Hand", cursive;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #161d25; --ink: #e4e9ef; --muted: #96a1b0;
+    --rule: #2a333e; --accent: #4fd1c0; --accent-soft: #163a36; --hl: #4a4020; --code-bg: #1d2630;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #161d25; --ink: #e4e9ef; --muted: #96a1b0;
+  --rule: #2a333e; --accent: #4fd1c0; --accent-soft: #163a36; --hl: #4a4020; --code-bg: #1d2630;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.shell {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-block: 48px 96px;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 56px;
+}
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 28px 64px; }
+  nav.toc { position: static !important; }
+}
+
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 32px); align-self: start; font-size: 13.5px; }
+nav.toc .label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+nav.toc a { display: flex; gap: 10px; padding: 4px 8px; margin-left: -8px; border-radius: 4px; color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
+nav.toc a span { font-family: var(--font-mono); font-size: 12px; color: var(--accent); min-width: 1.4em; }
+@media (max-width: 860px) { nav.toc ol { flex-direction: row; flex-wrap: wrap; gap: 4px 8px; } }
+
+header.doc { display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; color: var(--accent); letter-spacing: .04em; }
+h1 { font-family: var(--font-display); font-weight: 650; font-size: clamp(2rem, 4.5vw, 2.9rem); line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.lede { font-size: 1.1rem; color: var(--muted); max-width: 62ch; margin: 0; }
+dl.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 24px; margin: 8px 0 0; }
+dl.meta div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+dl.meta dt { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+dl.meta dd { margin: 0; font-size: 14px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+
+main { min-width: 0; }
+section { padding-top: 44px; display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 16px; }
+h2 { font-family: var(--font-display); font-weight: 650; font-size: 1.65rem; line-height: 1.2; margin: 0; text-wrap: balance; display: flex; gap: 14px; align-items: baseline; }
+h2 .num { font-family: var(--font-mono); font-size: .9rem; color: var(--accent); font-weight: 500; }
+h3 { font-size: 1.02rem; font-weight: 600; margin: 12px 0 0; }
+p { margin: 0; max-width: 68ch; }
+ul.plain { margin: 0; padding-left: 1.2em; max-width: 68ch; display: flex; flex-direction: column; gap: 4px; }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre.code { font-family: var(--font-mono); font-size: 13px; line-height: 1.55; background: var(--code-bg); padding: 16px 18px; border-radius: 6px; overflow-x: auto; margin: 0; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--code-bg); }
+td.method { font-family: var(--font-mono); font-weight: 500; color: var(--accent); white-space: nowrap; }
+
+/* Figures: dot-grid paper */
+figure.uml { margin: 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+figure.uml .canvas {
+  overflow-x: auto; padding: 18px 16px;
+  background-image: radial-gradient(var(--rule) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+figure.uml figcaption { border-top: 1px solid var(--rule); padding: 10px 16px; font-size: 13px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+figure.uml figcaption b { color: var(--ink); font-weight: 600; font-family: var(--font-mono); font-size: 12px; }
+
+/* Sketch SVG vocabulary */
+svg.sk { display: block; width: 100%; height: auto; margin: 0 auto; color: var(--ink); font-family: var(--font-hand); }
+svg.sk.w-md { max-width: 820px; }
+svg.sk.min { min-width: 640px; }
+svg.sk text { fill: var(--ink); font-size: 15px; }
+svg.sk text.t { font-weight: 700; font-size: 16px; }
+svg.sk text.s { fill: var(--muted); font-size: 13px; }
+svg.sk text.m { font-size: 13.5px; }
+svg.sk text.ta { fill: var(--accent); }
+svg.sk text.halo { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+svg.sk .box { fill: var(--surface); stroke: var(--ink); stroke-width: 1.7; }
+svg.sk .cyl { fill: var(--accent-soft); stroke: var(--ink); stroke-width: 1.7; }
+svg.sk .zone { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 8 6; }
+svg.sk .ln { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+svg.sk .ln.acc { stroke: var(--accent); stroke-width: 2; }
+svg.sk .dash { stroke-dasharray: 6 6; }
+svg.sk .life { fill: none; stroke: var(--muted); stroke-width: 1.3; stroke-dasharray: 2 6; stroke-linecap: round; }
+svg.sk .hl { fill: var(--hl); }
+svg.sk .hla { fill: var(--accent-soft); }
+svg.sk .dot { fill: var(--ink); }
+svg.sk .mk { fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+svg.sk .mk.mka { stroke: var(--accent); stroke-width: 2; }
+
+blockquote.prompt { margin: 0; padding: 14px 18px; border-left: 3px solid var(--accent); background: var(--surface); font-family: var(--font-mono); font-size: 13px; line-height: 1.6; white-space: pre-wrap; max-width: 76ch; }
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <nav class="toc" aria-label="Sections">
+    <div class="label">Contents</div>
+    <ol>
+      <li><a href="#purpose"><span>1</span>Purpose &amp; scope</a></li>
+      <li><a href="#usecases"><span>2</span>Use cases</a></li>
+      <li><a href="#architecture"><span>3</span>Architecture</a></li>
+      <li><a href="#flows"><span>4</span>Key flows</a></li>
+      <li><a href="#backend"><span>5</span>Backend</a></li>
+      <li><a href="#data"><span>6</span>Data model</a></li>
+      <li><a href="#frontend"><span>7</span>Frontend</a></li>
+      <li><a href="#structure"><span>8</span>Project layout</a></li>
+      <li><a href="#run"><span>9</span>Run &amp; verify</a></li>
+      <li><a href="#next"><span>10</span>Next steps</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="eyebrow">DESIGN DOCUMENT · rag-demo</div>
+      <h1>RAG Demo: upload documents, chat with them</h1>
+      <p class="lede">A minimal web app that shows semantic Retrieval-Augmented Generation end to end. Each stage, from chunking to grounded answers, is visible in the UI and maps to the CoALA framework.</p>
+      <dl class="meta">
+        <div><dt>Stack</dt><dd>FastAPI · LangChain · pgvector · Next.js</dd></div>
+        <div><dt>Models</dt><dd><code>gpt-4o-mini</code> · <code>text-embedding-3-small</code></dd></div>
+        <div><dt>Date</dt><dd>17 Oct 2026</dd></div>
+        <div><dt>Status</dt><dd><span class="pill">Approved · built</span></dd></div>
+      </dl>
+    </header>
+
+    <!-- ============ 1 PURPOSE ============ -->
+    <section id="purpose">
+      <h2><span class="num">1</span>Purpose &amp; scope</h2>
+      <p>The app is a learning tool. The ingestion pipeline fills a long-term <b>semantic memory</b> (pgvector). Each chat turn runs a <b>retrieval action</b> that copies the most relevant chunks into the model's <b>working memory</b> (the prompt).</p>
+
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk min" viewBox="0 0 940 320" role="img" aria-label="Two paths meet at semantic memory: uploads are chunked, embedded and stored in pgvector; each question is embedded, matched against pgvector, and the top four chunks go into working memory, which the LLM reasons over to answer.">
+  <defs>
+    <filter id="r0" filterUnits="userSpaceOnUse" x="0" y="0" width="940" height="320"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a0" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+    <marker id="b0" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk mka" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r0)">
+    <!-- ingestion lane -->
+    <path class="box" d="M40,50 H110 L130,70 V120 H40 Z"/><path class="ln" d="M110,50 V70 H130"/>
+    <rect class="box" x="180" y="60" width="110" height="50" rx="6"/>
+    <rect class="box" x="340" y="60" width="110" height="50" rx="6"/>
+    <path class="ln" d="M130,85 L178,85" marker-end="url(#a0)"/>
+    <path class="ln" d="M290,85 L338,85" marker-end="url(#a0)"/>
+    <path class="ln" d="M450,85 C510,85 540,98 548,126" marker-end="url(#a0)"/>
+    <!-- semantic memory -->
+    <path class="cyl" d="M465,145 V215 A95,16 0 0 0 655,215 V145"/>
+    <ellipse class="cyl" cx="560" cy="145" rx="95" ry="16"/>
+    <!-- query lane -->
+    <rect class="box" x="40" y="235" width="100" height="46" rx="22"/>
+    <rect class="box" x="190" y="235" width="130" height="46" rx="6"/>
+    <path class="ln" d="M140,258 L188,258" marker-end="url(#a0)"/>
+    <path class="ln acc" d="M320,258 C400,258 440,240 466,222" marker-end="url(#b0)"/>
+    <!-- working memory + LLM -->
+    <rect class="hl" x="718" y="98" width="200" height="140" rx="8"/>
+    <rect class="box" x="710" y="90" width="200" height="140" rx="8"/>
+    <path class="ln acc" d="M655,180 L707,180" marker-end="url(#b0)"/>
+    <rect class="box" x="740" y="262" width="140" height="44" rx="6"/>
+    <path class="ln" d="M810,230 L810,259" marker-end="url(#a0)"/>
+  </g>
+  <g>
+    <text class="s" x="40" y="30">ingestion · CoALA learning action · on upload</text>
+    <text class="t" x="85" y="92" text-anchor="middle">docs</text>
+    <text class="s" x="85" y="142" text-anchor="middle">pdf · txt · md</text>
+    <text class="t" x="235" y="91" text-anchor="middle">chunk</text>
+    <text class="s" x="235" y="130" text-anchor="middle">1000 chars / 150 overlap</text>
+    <text class="t" x="395" y="91" text-anchor="middle">embed</text>
+    <text class="s" x="395" y="130" text-anchor="middle">1536-d vectors</text>
+    <text class="m halo" x="512" y="78" text-anchor="middle">store</text>
+    <text class="t" x="560" y="187" text-anchor="middle">semantic memory</text>
+    <text class="s" x="560" y="207" text-anchor="middle">pgvector</text>
+    <text class="s" x="40" y="222">query · CoALA retrieval action · every question</text>
+    <text class="t" x="90" y="263" text-anchor="middle">question</text>
+    <text class="t" x="255" y="263" text-anchor="middle">embed query</text>
+    <text class="m ta halo" x="392" y="238" text-anchor="middle">similarity search · k=4</text>
+    <text class="m ta halo" x="681" y="170" text-anchor="middle">top 4</text>
+    <text class="t" x="810" y="117" text-anchor="middle">working memory</text>
+    <text class="s" x="810" y="143" text-anchor="middle">system rules</text>
+    <text class="m ta" x="810" y="165" text-anchor="middle">retrieved chunks</text>
+    <text class="s" x="810" y="187" text-anchor="middle">last 6 chat turns</text>
+    <text class="s" x="810" y="209" text-anchor="middle">the question</text>
+    <text class="m halo" x="820" y="250">reason</text>
+    <text class="t" x="810" y="289" text-anchor="middle">LLM → answer</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 1</b> RAG mapped to CoALA. Both paths meet at semantic memory. Highlighted in teal: the retrieval path that fills working memory.</figcaption>
+      </figure>
+
+      <h3>In scope</h3>
+      <ul class="plain">
+        <li>Upload <code>.pdf</code>, <code>.txt</code> and <code>.md</code> files and index them into pgvector.</li>
+        <li>List the indexed documents.</li>
+        <li>A chat agent that answers only from the documents and shows its sources (file, page, snippet).</li>
+        <li>Short chat history, kept on the client and sent with each request.</li>
+      </ul>
+      <h3>Out of scope</h3>
+      <p>Authentication, multi-user isolation, streaming, document deletion, reranking, hybrid search and production deployment. Section 10 lists these as follow-ups.</p>
+    </section>
+
+    <!-- ============ 2 USE CASES ============ -->
+    <section id="usecases">
+      <h2><span class="num">2</span>Use cases</h2>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk w-md min" viewBox="0 0 780 300" role="img" aria-label="Use case diagram: the user can upload documents, view indexed documents, ask a question, and inspect answer sources. Upload and ask call the OpenAI API.">
+  <defs>
+    <filter id="r1" filterUnits="userSpaceOnUse" x="0" y="0" width="780" height="300"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r1)">
+    <circle class="box" cx="70" cy="100" r="14"/>
+    <path class="ln" d="M70,114 V165 M42,132 H98 M70,165 L48,200 M70,165 L92,200"/>
+    <rect class="zone" x="170" y="20" width="400" height="262" rx="12"/>
+    <ellipse class="box" cx="370" cy="82" rx="140" ry="22"/>
+    <ellipse class="box" cx="370" cy="138" rx="140" ry="22"/>
+    <ellipse class="hla" cx="376" cy="200" rx="140" ry="22"/>
+    <ellipse class="box" cx="370" cy="194" rx="140" ry="22" style="fill:none"/>
+    <ellipse class="box" cx="370" cy="250" rx="140" ry="22"/>
+    <path class="ln" d="M102,134 L229,84 M102,136 L229,139 M102,138 L229,193 M102,140 L229,248"/>
+    <rect class="box" x="630" y="120" width="130" height="60" rx="6"/>
+    <path class="ln dash" d="M510,84 L627,136" marker-end="url(#a1)"/>
+    <path class="ln dash" d="M510,192 L627,166" marker-end="url(#a1)"/>
+  </g>
+  <g>
+    <text class="t" x="70" y="226" text-anchor="middle">User</text>
+    <text class="s" x="186" y="44">RAG Demo app</text>
+    <text x="370" y="87" text-anchor="middle">upload documents</text>
+    <text x="370" y="143" text-anchor="middle">view indexed documents</text>
+    <text class="t" x="370" y="199" text-anchor="middle">ask a question</text>
+    <text x="370" y="255" text-anchor="middle">inspect answer sources</text>
+    <text class="t" x="695" y="155" text-anchor="middle">OpenAI API</text>
+    <text class="m halo" x="566" y="100" text-anchor="middle">embed</text>
+    <text class="m halo" x="574" y="206" text-anchor="middle">embed + chat</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 2</b> One user, four use cases. Only uploading and asking call OpenAI; listing and inspecting are local.</figcaption>
+      </figure>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Use case</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>UC1</td><td>Upload documents</td><td>The user picks files. The system chunks, embeds and stores them, then shows how many chunks were indexed per file.</td></tr>
+          <tr><td>UC2</td><td>View indexed documents</td><td>Lists the distinct source filenames in the vector store.</td></tr>
+          <tr><td>UC3</td><td>Ask a question</td><td>Retrieves the top-4 chunks. The LLM answers from them only, or replies "I don't know based on the uploaded documents."</td></tr>
+          <tr><td>UC4</td><td>Inspect sources</td><td>Each answer lists the chunks it used (file, page, snippet), so retrieval is visible.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- ============ 3 ARCHITECTURE ============ -->
+    <section id="architecture">
+      <h2><span class="num">3</span>Architecture</h2>
+      <p>The system has three runtime parts: a Next.js client, a FastAPI service that owns all LangChain logic, and Postgres with the pgvector extension. OpenAI provides the embedding and chat models.</p>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk min" viewBox="0 0 930 500" role="img" aria-label="Component diagram: UploadPanel and ChatPanel in the browser call main.py; main.py calls ingest.py and rag.py, both of which use vectorstore.py; vectorstore searches pgvector and calls OpenAI for embeddings; rag.py calls OpenAI for chat.">
+  <defs>
+    <filter id="r2" filterUnits="userSpaceOnUse" x="0" y="0" width="930" height="500"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="8" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+    <marker id="b2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk mka" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r2)">
+    <rect class="zone" x="20" y="50" width="200" height="280" rx="12"/>
+    <rect class="box" x="45" y="80" width="150" height="44" rx="6"/>
+    <rect class="box" x="45" y="170" width="150" height="44" rx="6"/>
+    <rect class="box" x="45" y="260" width="150" height="44" rx="6"/>
+    <path class="ln" d="M120,124 L120,167" marker-end="url(#a2)"/>
+    <path class="ln" d="M45,102 C14,102 14,282 42,282" marker-end="url(#a2)"/>
+
+    <rect class="zone" x="320" y="50" width="350" height="430" rx="12"/>
+    <rect class="box" x="350" y="75" width="290" height="48" rx="6"/>
+    <rect class="hl" x="356" y="181" width="130" height="60" rx="6"/>
+    <rect class="box" x="350" y="175" width="130" height="60" rx="6"/>
+    <rect class="hl" x="516" y="181" width="130" height="60" rx="6"/>
+    <rect class="box" x="510" y="175" width="130" height="60" rx="6"/>
+    <rect class="box" x="350" y="295" width="290" height="60" rx="6"/>
+    <rect class="box" x="430" y="405" width="130" height="44" rx="6"/>
+    <path class="ln" d="M415,123 L415,172" marker-end="url(#a2)"/>
+    <path class="ln" d="M575,123 L575,172" marker-end="url(#a2)"/>
+    <path class="ln" d="M415,235 L415,292" marker-end="url(#a2)"/>
+    <path class="ln" d="M575,235 L575,292" marker-end="url(#a2)"/>
+    <path class="ln" d="M495,355 L495,402" marker-end="url(#a2)"/>
+
+    <path class="ln" d="M195,192 C265,192 285,92 347,92" marker-end="url(#a2)"/>
+    <path class="ln" d="M195,282 C290,282 292,108 347,108" marker-end="url(#a2)"/>
+
+    <rect class="box" x="735" y="110" width="180" height="64" rx="6"/>
+    <path class="cyl" d="M737,300 V370 A88,14 0 0 0 913,370 V300"/>
+    <ellipse class="cyl" cx="825" cy="300" rx="88" ry="14"/>
+    <path class="ln acc" d="M640,325 L734,325" marker-end="url(#b2)"/>
+    <path class="ln" d="M640,195 C690,195 700,150 732,150" marker-end="url(#a2)"/>
+    <path class="ln" d="M620,295 C655,250 760,240 795,178" marker-end="url(#a2)"/>
+  </g>
+  <g>
+    <text class="s" x="30" y="40">browser · Next.js :3000</text>
+    <text class="t" x="120" y="107" text-anchor="middle">page.tsx</text>
+    <text class="t" x="120" y="197" text-anchor="middle">UploadPanel</text>
+    <text class="t" x="120" y="287" text-anchor="middle">ChatPanel</text>
+    <text class="s" x="330" y="40">FastAPI · :8000</text>
+    <text x="495" y="105" text-anchor="middle"><tspan font-weight="700">main.py</tspan> · routes + CORS</text>
+    <text class="t" x="415" y="201" text-anchor="middle">ingest.py</text>
+    <text class="s" x="415" y="223" text-anchor="middle">load · split · store</text>
+    <text class="t" x="575" y="201" text-anchor="middle">rag.py</text>
+    <text class="s" x="575" y="223" text-anchor="middle">retrieve · prompt</text>
+    <text class="t" x="495" y="321" text-anchor="middle">vectorstore.py</text>
+    <text class="s" x="495" y="343" text-anchor="middle">PGVector + OpenAIEmbeddings</text>
+    <text class="t" x="495" y="432" text-anchor="middle">config.py</text>
+    <text class="m halo" x="268" y="140" text-anchor="middle">POST /upload</text>
+    <text class="m halo" x="262" y="264" text-anchor="middle">POST /chat</text>
+    <text class="t" x="825" y="138" text-anchor="middle">OpenAI API</text>
+    <text class="s" x="825" y="160" text-anchor="middle">embeddings · gpt-4o-mini</text>
+    <text class="t" x="825" y="340" text-anchor="middle">PostgreSQL + pgvector</text>
+    <text class="s" x="825" y="362" text-anchor="middle">docker · :5432</text>
+    <text class="m ta halo" x="688" y="314" text-anchor="middle">vector search</text>
+    <text class="m halo" x="692" y="180" text-anchor="middle">chat</text>
+    <text class="m halo" x="728" y="244" text-anchor="middle">embed</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 3</b> Components. The two highlighted modules hold all RAG logic. Both reach pgvector only through <code>vectorstore.py</code>.</figcaption>
+      </figure>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk w-md min" viewBox="0 0 900 320" role="img" aria-label="Deployment: next dev on port 3000 calls uvicorn on port 8000 over HTTP; uvicorn talks to the pgvector container over psycopg and to api.openai.com over HTTPS, the only call that leaves the machine.">
+  <defs>
+    <filter id="r3" filterUnits="userSpaceOnUse" x="0" y="0" width="900" height="320"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r3)">
+    <rect class="zone" x="20" y="40" width="640" height="265" rx="14"/>
+    <rect class="box" x="50" y="80" width="170" height="64" rx="6"/>
+    <rect class="box" x="290" y="80" width="190" height="64" rx="6"/>
+    <rect class="zone" x="270" y="168" width="230" height="124" rx="10"/>
+    <path class="cyl" d="M305,210 V266 A80,12 0 0 0 465,266 V210"/>
+    <ellipse class="cyl" cx="385" cy="210" rx="80" ry="12"/>
+    <path class="ln" d="M220,112 L287,112" marker-end="url(#a3)"/>
+    <path class="ln" d="M385,144 L385,195" marker-end="url(#a3)"/>
+    <path class="ln" d="M480,112 L698,112" marker-end="url(#a3)"/>
+    <path class="box" d="M725,132 C700,132 700,98 726,96 C728,70 768,64 782,84 C798,62 845,68 846,94 C875,94 876,132 850,132 Z"/>
+  </g>
+  <g>
+    <text class="s" x="36" y="32">developer machine</text>
+    <text class="t" x="135" y="108" text-anchor="middle">next dev</text>
+    <text class="s" x="135" y="129" text-anchor="middle">:3000</text>
+    <text class="t" x="385" y="108" text-anchor="middle">uvicorn</text>
+    <text class="s" x="385" y="129" text-anchor="middle">FastAPI · :8000</text>
+    <text class="s" x="284" y="190">docker</text>
+    <text class="t" x="385" y="242" text-anchor="middle">pgvector:pg16</text>
+    <text class="s" x="385" y="262" text-anchor="middle">volume pgdata</text>
+    <text class="m halo" x="254" y="102" text-anchor="middle">HTTP</text>
+    <text class="m halo" x="396" y="174">psycopg</text>
+    <text class="m halo" x="590" y="102" text-anchor="middle">HTTPS</text>
+    <text class="m" x="788" y="119" text-anchor="middle">api.openai.com</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 4</b> Local deployment. Only the call to OpenAI leaves your machine.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============ 4 FLOWS ============ -->
+    <section id="flows">
+      <h2><span class="num">4</span>Key flows</h2>
+      <h3>4.1 Ingestion: upload → chunk → embed → store</h3>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk min" viewBox="0 0 960 540" role="img" aria-label="Ingestion sequence: the user uploads files; for each file FastAPI saves a temp file and calls ingest_file, which loads and splits it, gets embeddings from OpenAI, inserts rows into pgvector, and returns the chunk count shown to the user.">
+  <defs>
+    <filter id="r4" filterUnits="userSpaceOnUse" x="0" y="0" width="960" height="540"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="14" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+    <marker id="b4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk mka" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r4)">
+    <rect class="box" x="10" y="20" width="120" height="40" rx="18"/>
+    <rect class="box" x="155" y="20" width="130" height="40" rx="6"/>
+    <rect class="box" x="315" y="20" width="130" height="40" rx="6"/>
+    <rect class="hl" x="481" y="26" width="130" height="40" rx="6"/>
+    <rect class="box" x="475" y="20" width="130" height="40" rx="6"/>
+    <rect class="box" x="645" y="20" width="130" height="40" rx="6"/>
+    <rect class="box" x="810" y="20" width="130" height="40" rx="6"/>
+    <path class="life" d="M70,60 V530 M220,60 V530 M380,60 V530 M540,60 V530 M710,60 V530 M875,60 V530"/>
+    <rect class="zone" x="318" y="150" width="620" height="282" rx="8"/>
+    <path class="ln" d="M70,95 L217,95" marker-end="url(#a4)"/>
+    <path class="ln" d="M220,131 L377,131" marker-end="url(#a4)"/>
+    <path class="ln" d="M380,190 H424 V208 H384" marker-end="url(#a4)"/>
+    <path class="ln" d="M380,236 L537,236" marker-end="url(#a4)"/>
+    <path class="ln" d="M540,272 H584 V290 H544" marker-end="url(#a4)"/>
+    <path class="ln acc" d="M540,322 L707,322" marker-end="url(#b4)"/>
+    <path class="ln acc dash" d="M710,356 L543,356" marker-end="url(#b4)"/>
+    <path class="ln acc" d="M540,390 L872,390" marker-end="url(#b4)"/>
+    <path class="ln dash" d="M540,418 L383,418" marker-end="url(#a4)"/>
+    <path class="ln dash" d="M380,466 L223,466" marker-end="url(#a4)"/>
+    <path class="ln dash" d="M220,502 L73,502" marker-end="url(#a4)"/>
+  </g>
+  <g>
+    <text class="t" x="70" y="45" text-anchor="middle">User</text>
+    <text class="t" x="220" y="45" text-anchor="middle">UploadPanel</text>
+    <text class="t" x="380" y="45" text-anchor="middle">FastAPI</text>
+    <text class="t" x="540" y="45" text-anchor="middle">ingest.py</text>
+    <text class="t" x="710" y="45" text-anchor="middle">Embeddings</text>
+    <text class="t" x="875" y="45" text-anchor="middle">pgvector</text>
+    <text class="s" x="330" y="168">loop · each file</text>
+    <text class="m halo" x="145" y="88" text-anchor="middle">1 · pick files, Upload</text>
+    <text class="m halo" x="300" y="124" text-anchor="middle">2 · POST /upload</text>
+    <text class="m halo" x="432" y="196">3 · check type, save temp file</text>
+    <text class="m halo" x="460" y="229" text-anchor="middle">4 · ingest_file()</text>
+    <text class="m halo" x="592" y="278">5 · load → split → tag {source, page}</text>
+    <text class="m ta halo" x="625" y="315" text-anchor="middle">6 · embed_documents()</text>
+    <text class="m ta halo" x="625" y="349" text-anchor="middle">7 · vectors, 1536-d</text>
+    <text class="m ta halo" x="790" y="383" text-anchor="middle">8 · INSERT rows</text>
+    <text class="m halo" x="460" y="411" text-anchor="middle">9 · chunk count</text>
+    <text class="m halo" x="300" y="459" text-anchor="middle">10 · {filename, chunks}</text>
+    <text class="m halo" x="145" y="495" text-anchor="middle">11 · "2 chunks indexed"</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 5</b> Ingestion, a CoALA learning action. Teal marks the only expensive steps: the embedding call and the write to semantic memory. Dashed arrows are returns.</figcaption>
+      </figure>
+
+      <h3>4.2 Query: question → retrieve → generate</h3>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk min" viewBox="0 0 1000 580" role="img" aria-label="Query sequence: the question goes from ChatPanel through FastAPI to rag.py, which embeds it, runs a similarity search on pgvector for the top four chunks, builds the prompt as working memory, calls ChatOpenAI, and returns the answer with sources back to the user.">
+  <defs>
+    <filter id="r5" filterUnits="userSpaceOnUse" x="0" y="0" width="1000" height="580"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="17" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+    <marker id="b5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk mka" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r5)">
+    <rect class="box" x="8" y="20" width="104" height="40" rx="18"/>
+    <rect class="box" x="140" y="20" width="110" height="40" rx="6"/>
+    <rect class="box" x="280" y="20" width="110" height="40" rx="6"/>
+    <rect class="hl" x="441" y="26" width="110" height="40" rx="6"/>
+    <rect class="box" x="435" y="20" width="110" height="40" rx="6"/>
+    <rect class="box" x="585" y="20" width="110" height="40" rx="6"/>
+    <rect class="box" x="735" y="20" width="110" height="40" rx="6"/>
+    <rect class="box" x="875" y="20" width="110" height="40" rx="6"/>
+    <path class="life" d="M60,60 V570 M195,60 V570 M335,60 V570 M490,60 V570 M640,60 V570 M790,60 V570 M930,60 V570"/>
+    <path class="ln" d="M60,95 L192,95" marker-end="url(#a5)"/>
+    <path class="ln" d="M195,131 L332,131" marker-end="url(#a5)"/>
+    <path class="ln" d="M335,167 L487,167" marker-end="url(#a5)"/>
+    <path class="ln" d="M490,203 L637,203" marker-end="url(#a5)"/>
+    <path class="ln dash" d="M640,239 L493,239" marker-end="url(#a5)"/>
+    <path class="ln acc" d="M490,275 L787,275" marker-end="url(#b5)"/>
+    <path class="ln acc dash" d="M790,311 L493,311" marker-end="url(#b5)"/>
+    <rect class="hl" x="536" y="336" width="244" height="24" rx="4"/>
+    <path class="ln" d="M490,342 H530 V362 H494" marker-end="url(#a5)"/>
+    <path class="ln" d="M490,397 L927,397" marker-end="url(#a5)"/>
+    <path class="ln dash" d="M930,433 L493,433" marker-end="url(#a5)"/>
+    <path class="ln dash" d="M490,469 L338,469" marker-end="url(#a5)"/>
+    <path class="ln dash" d="M335,505 L198,505" marker-end="url(#a5)"/>
+    <path class="ln dash" d="M195,541 L63,541" marker-end="url(#a5)"/>
+  </g>
+  <g>
+    <text class="t" x="60" y="45" text-anchor="middle">User</text>
+    <text class="t" x="195" y="45" text-anchor="middle">ChatPanel</text>
+    <text class="t" x="335" y="45" text-anchor="middle">FastAPI</text>
+    <text class="t" x="490" y="45" text-anchor="middle">rag.py</text>
+    <text class="t" x="640" y="45" text-anchor="middle">Embeddings</text>
+    <text class="t" x="790" y="45" text-anchor="middle">pgvector</text>
+    <text class="t" x="930" y="45" text-anchor="middle">ChatOpenAI</text>
+    <text class="m halo" x="127" y="88" text-anchor="middle">1 · ask</text>
+    <text class="m halo" x="265" y="124" text-anchor="middle">2 · POST /chat</text>
+    <text class="m halo" x="412" y="160" text-anchor="middle">3 · answer()</text>
+    <text class="m halo" x="565" y="196" text-anchor="middle">4 · embed_query()</text>
+    <text class="m halo" x="565" y="232" text-anchor="middle">5 · query vector</text>
+    <text class="m ta halo" x="640" y="268" text-anchor="middle">6 · similarity search, k=4</text>
+    <text class="m ta halo" x="640" y="304" text-anchor="middle">7 · top-4 chunks + metadata</text>
+    <text class="m" x="544" y="353">8 · build prompt = working memory</text>
+    <text class="m halo" x="710" y="390" text-anchor="middle">9 · invoke(messages)</text>
+    <text class="m halo" x="710" y="426" text-anchor="middle">10 · answer with [file p.N] cites</text>
+    <text class="m halo" x="412" y="462" text-anchor="middle">11 · answer, sources</text>
+    <text class="m halo" x="265" y="498" text-anchor="middle">12 · 200 OK</text>
+    <text class="m halo" x="127" y="534" text-anchor="middle">13 · show</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 6</b> One chat turn. The teal arrows are the retrieval action. Step 8, highlighted, is where retrieved chunks become working memory.</figcaption>
+      </figure>
+
+      <h3>4.3 Chat request lifecycle</h3>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk w-md min" viewBox="0 0 760 245" role="img" aria-label="Chat panel states: Idle goes to Sending on submit; Sending goes to Showing on 200 OK or to Error on a network or server error; both return to Idle.">
+  <defs>
+    <filter id="r6" filterUnits="userSpaceOnUse" x="0" y="0" width="760" height="245"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="20" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r6)">
+    <circle class="dot" cx="40" cy="120" r="9"/>
+    <rect class="box" x="90" y="96" width="110" height="48" rx="22"/>
+    <rect class="hl" x="296" y="102" width="130" height="48" rx="22"/>
+    <rect class="box" x="290" y="96" width="130" height="48" rx="22"/>
+    <rect class="box" x="540" y="36" width="140" height="48" rx="22"/>
+    <rect class="box" x="540" y="156" width="140" height="48" rx="22"/>
+    <path class="ln" d="M49,120 L87,120" marker-end="url(#a6)"/>
+    <path class="ln" d="M200,120 L287,120" marker-end="url(#a6)"/>
+    <path class="ln" d="M420,110 C480,100 490,60 537,60" marker-end="url(#a6)"/>
+    <path class="ln" d="M420,130 C480,140 490,180 537,180" marker-end="url(#a6)"/>
+    <path class="ln" d="M610,36 C610,6 145,6 145,93" marker-end="url(#a6)"/>
+    <path class="ln dash" d="M610,204 C610,236 145,236 145,147" marker-end="url(#a6)"/>
+  </g>
+  <g>
+    <text class="t" x="145" y="126" text-anchor="middle">Idle</text>
+    <text class="t" x="355" y="126" text-anchor="middle">Sending</text>
+    <text class="t" x="610" y="66" text-anchor="middle">Showing</text>
+    <text class="t" x="610" y="186" text-anchor="middle">Error</text>
+    <text class="m halo" x="244" y="111" text-anchor="middle">submit</text>
+    <text class="m halo" x="484" y="70" text-anchor="middle">200 OK</text>
+    <text class="m halo" x="476" y="196" text-anchor="middle">network / 5xx</text>
+    <text class="m halo" x="380" y="23" text-anchor="middle">answer rendered</text>
+    <text class="m halo" x="380" y="232" text-anchor="middle">user retries</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 7</b> The chat panel's states. While it's Sending, the input is disabled so only one question is in flight at a time.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============ 5 BACKEND ============ -->
+    <section id="backend">
+      <h2><span class="num">5</span>Backend design</h2>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk min" viewBox="0 0 990 560" role="img" aria-label="Class diagram: main.py accepts ChatRequest and returns ChatResponse, and calls ingest.py, rag.py and vectorstore.py; ingest and rag use vectorstore; rag and vectorstore read Settings.">
+  <defs>
+    <filter id="r7" filterUnits="userSpaceOnUse" x="0" y="0" width="990" height="560"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a7" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r7)">
+    <!-- pydantic models -->
+    <rect class="box" x="20" y="20" width="170" height="80" rx="4"/><path class="ln" d="M20,50 H190"/>
+    <rect class="box" x="220" y="20" width="170" height="80" rx="4"/><path class="ln" d="M220,50 H390"/>
+    <rect class="box" x="430" y="20" width="200" height="124" rx="4"/><path class="ln" d="M430,50 H630"/>
+    <rect class="box" x="670" y="20" width="170" height="80" rx="4"/><path class="ln" d="M670,50 H840"/>
+    <rect class="box" x="870" y="20" width="110" height="100" rx="4"/><path class="ln" d="M870,50 H980"/>
+    <polygon class="dot" points="220,60 210,55 200,60 210,65"/><path class="ln" d="M200,60 H190"/>
+    <polygon class="dot" points="840,60 850,55 860,60 850,65"/><path class="ln" d="M860,60 H870"/>
+    <path class="ln dash" d="M430,60 L393,60" marker-end="url(#a7)"/>
+    <path class="ln dash" d="M630,60 L667,60" marker-end="url(#a7)"/>
+    <!-- modules -->
+    <rect class="hl" x="186" y="216" width="240" height="100" rx="4"/>
+    <rect class="box" x="180" y="210" width="240" height="100" rx="4"/><path class="ln" d="M180,240 H420"/>
+    <rect class="hl" x="566" y="216" width="250" height="100" rx="4"/>
+    <rect class="box" x="560" y="210" width="250" height="100" rx="4"/><path class="ln" d="M560,240 H810"/>
+    <rect class="box" x="330" y="390" width="250" height="80" rx="4"/><path class="ln" d="M330,420 H580"/>
+    <rect class="box" x="680" y="370" width="240" height="170" rx="4"/><path class="ln" d="M680,400 H920"/>
+    <path class="ln" d="M470,144 L332,207" marker-end="url(#a7)"/>
+    <path class="ln" d="M590,144 L678,207" marker-end="url(#a7)"/>
+    <path class="ln" d="M530,144 L471,387" marker-end="url(#a7)"/>
+    <path class="ln" d="M330,310 L398,387" marker-end="url(#a7)"/>
+    <path class="ln" d="M620,310 L542,387" marker-end="url(#a7)"/>
+    <path class="ln" d="M760,310 L789,367" marker-end="url(#a7)"/>
+    <path class="ln" d="M580,430 L677,430" marker-end="url(#a7)"/>
+  </g>
+  <g>
+    <text class="t" x="105" y="41" text-anchor="middle">Message</text>
+    <text class="m" x="32" y="70">role: user | assistant</text>
+    <text class="m" x="32" y="90">content: str</text>
+    <text class="t" x="305" y="41" text-anchor="middle">ChatRequest</text>
+    <text class="m" x="232" y="70">message: str</text>
+    <text class="m" x="232" y="90">history: list[Message]</text>
+    <text class="t" x="530" y="41" text-anchor="middle">main.py</text>
+    <text class="m" x="442" y="70">GET /health</text>
+    <text class="m" x="442" y="90">POST /upload</text>
+    <text class="m" x="442" y="110">GET /documents</text>
+    <text class="m" x="442" y="130">POST /chat</text>
+    <text class="t" x="755" y="41" text-anchor="middle">ChatResponse</text>
+    <text class="m" x="682" y="70">answer: str</text>
+    <text class="m" x="682" y="90">sources: list[Source]</text>
+    <text class="t" x="925" y="41" text-anchor="middle">Source</text>
+    <text class="m" x="882" y="70">source: str</text>
+    <text class="m" x="882" y="90">page: int</text>
+    <text class="m" x="882" y="110">snippet: str</text>
+    <text class="s halo" x="411" y="52" text-anchor="middle">in</text>
+    <text class="s halo" x="649" y="52" text-anchor="middle">out</text>
+    <text class="t" x="300" y="231" text-anchor="middle">ingest.py</text>
+    <text class="m" x="192" y="260">ingest_file(path, name) → int</text>
+    <text class="m" x="192" y="280">_load(path, name)</text>
+    <text class="m" x="192" y="300">_split(docs)</text>
+    <text class="t" x="685" y="231" text-anchor="middle">rag.py</text>
+    <text class="m" x="572" y="260">answer(question, history) → dict</text>
+    <text class="m" x="572" y="280">_format_context(docs)</text>
+    <text class="m" x="572" y="300">_llm() → ChatOpenAI</text>
+    <text class="t" x="455" y="411" text-anchor="middle">vectorstore.py</text>
+    <text class="m" x="342" y="440">get_vector_store() → PGVector</text>
+    <text class="m" x="342" y="460">list_sources() → list[str]</text>
+    <text class="t" x="800" y="391" text-anchor="middle">Settings</text>
+    <text class="m" x="692" y="420">chat_model = gpt-4o-mini</text>
+    <text class="m" x="692" y="440">embedding_model = 3-small</text>
+    <text class="m" x="692" y="460">chunk_size = 1000</text>
+    <text class="m" x="692" y="480">chunk_overlap = 150</text>
+    <text class="m" x="692" y="500">top_k = 4</text>
+    <text class="m" x="692" y="520">history_turns = 6</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 8</b> Backend modules and request/response models. Solid arrows are calls, dashed arrows are the models a route takes in and returns, and ◆ means "contains". All tuning knobs are in <code>Settings</code>.</figcaption>
+      </figure>
+      <div class="table-wrap"><table>
+        <thead><tr><th>File</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td><code>app/config.py</code></td><td>Loads <code>.env</code> and exposes a frozen <code>Settings</code> dataclass.</td></tr>
+          <tr><td><code>app/vectorstore.py</code></td><td>Cached <code>PGVector</code> (collection <code>docs</code>, JSONB metadata) using <code>OpenAIEmbeddings</code>, plus the distinct-sources query.</td></tr>
+          <tr><td><code>app/ingest.py</code></td><td>Picks a loader by file extension, splits with <code>RecursiveCharacterTextSplitter</code>, tags <code>source</code> and a 1-based <code>page</code>, then calls <code>add_documents</code>.</td></tr>
+          <tr><td><code>app/rag.py</code></td><td>Runs <code>similarity_search(k=4)</code>, builds the prompt with <code>ChatPromptTemplate</code> and <code>MessagesPlaceholder</code>, calls <code>ChatOpenAI(temperature=0)</code>, and returns the answer and sources.</td></tr>
+          <tr><td><code>app/main.py</code></td><td>FastAPI routes, CORS for <code>localhost:3000</code>, request and response models, and error mapping.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>System prompt</h3>
+      <blockquote class="prompt">You are a helpful assistant for a document Q&amp;A demo.
+Answer the question using ONLY the context below.
+If the answer is not in the context, reply exactly:
+"I don't know based on the uploaded documents."
+Cite sources inline as [filename p.N].
+
+Context:
+{context}</blockquote>
+      <h3>API contract</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Method</th><th>Path</th><th>Request</th><th>Response</th></tr></thead>
+        <tbody>
+          <tr><td class="method">GET</td><td><code>/health</code></td><td>n/a</td><td><code>{"status":"ok"}</code></td></tr>
+          <tr><td class="method">POST</td><td><code>/upload</code></td><td>multipart, field <code>files</code> (1..n)</td><td><code>[{"filename","chunks"}]</code></td></tr>
+          <tr><td class="method">GET</td><td><code>/documents</code></td><td>n/a</td><td><code>["a.pdf", …]</code></td></tr>
+          <tr><td class="method">POST</td><td><code>/chat</code></td><td><code>{"message","history":[{"role","content"}]}</code></td><td><code>{"answer","sources":[{"source","page","snippet"}]}</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>Errors: <code>400</code> for an unsupported file type or an empty message. <code>500</code> with a readable <code>detail</code> for OpenAI or database failures.</p>
+    </section>
+
+    <!-- ============ 6 DATA ============ -->
+    <section id="data">
+      <h2><span class="num">6</span>Data model</h2>
+      <p><code>langchain-postgres</code> creates the <code>vector</code> extension and both tables on first use, so no migrations are needed. Each chunk is one row: its text, its 1536-dimension embedding and JSONB metadata.</p>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk w-md min" viewBox="0 0 820 240" role="img" aria-label="Entity relationship: one langchain_pg_collection row named docs contains many langchain_pg_embedding rows; each embedding row holds the chunk text, a 1536-dimension vector and source and page metadata.">
+  <defs>
+    <filter id="r8" filterUnits="userSpaceOnUse" x="0" y="0" width="820" height="240"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="26" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/></filter>
+  </defs>
+  <g filter="url(#r8)">
+    <rect class="box" x="30" y="40" width="280" height="112" rx="4"/>
+    <rect class="hl" x="31" y="41" width="278" height="33"/>
+    <path class="ln" d="M30,74 H310 M30,100 H310 M30,126 H310"/>
+    <rect class="box" x="480" y="40" width="310" height="164" rx="4"/>
+    <rect class="hl" x="481" y="41" width="308" height="33"/>
+    <rect class="hla" x="481" y="127" width="308" height="25"/>
+    <path class="ln" d="M480,74 H790 M480,100 H790 M480,126 H790 M480,152 H790 M480,178 H790"/>
+    <path class="ln" d="M310,87 C390,87 400,113 452,113 M462,113 H480"/>
+    <path class="ln" d="M320,79 V95"/>
+    <path class="ln" d="M462,113 L480,104 M462,113 L480,122"/>
+    <circle class="box" cx="456" cy="113" r="5"/>
+  </g>
+  <g>
+    <text class="t" x="170" y="63" text-anchor="middle">langchain_pg_collection</text>
+    <text class="m" x="44" y="92">uuid</text><text class="s" x="296" y="92" text-anchor="end">PK</text>
+    <text class="m" x="44" y="118">name</text><text class="s" x="296" y="118" text-anchor="end">'docs'</text>
+    <text class="m" x="44" y="144">cmetadata</text><text class="s" x="296" y="144" text-anchor="end">jsonb</text>
+    <text class="t" x="635" y="63" text-anchor="middle">langchain_pg_embedding</text>
+    <text class="m" x="494" y="92">id</text><text class="s" x="776" y="92" text-anchor="end">PK</text>
+    <text class="m" x="494" y="118">collection_id</text><text class="s" x="776" y="118" text-anchor="end">FK → uuid</text>
+    <text class="m ta" x="494" y="144">embedding</text><text class="m ta" x="776" y="144" text-anchor="end">vector(1536)</text>
+    <text class="m" x="494" y="170">document</text><text class="s" x="776" y="170" text-anchor="end">chunk text</text>
+    <text class="m" x="494" y="196">cmetadata</text><text class="s" x="776" y="196" text-anchor="end">{source, page}</text>
+    <text class="m halo" x="395" y="84" text-anchor="middle">contains</text>
+    <text class="s" x="326" y="78">1</text>
+    <text class="s" x="440" y="134">0..n</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 9</b> The vector store tables. One collection holds many chunk rows. The highlighted <code>embedding</code> column is what similarity search compares.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============ 7 FRONTEND ============ -->
+    <section id="frontend">
+      <h2><span class="num">7</span>Frontend design</h2>
+      <figure class="uml">
+        <div class="canvas">
+<svg class="sk w-md min" viewBox="0 0 780 350" role="img" aria-label="Frontend components: page.tsx renders UploadPanel and ChatPanel; ChatPanel renders one MessageBubble per message; both panels call lib/api.ts, which fetches the FastAPI backend on port 8000.">
+  <defs>
+    <filter id="r9" filterUnits="userSpaceOnUse" x="0" y="0" width="780" height="350"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="29" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <marker id="a9" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="mk" d="M2 2 L10 6 L2 10"/></marker>
+  </defs>
+  <g filter="url(#r9)">
+    <rect class="box" x="280" y="20" width="220" height="48" rx="6"/>
+    <rect class="box" x="40" y="130" width="240" height="62" rx="6"/>
+    <rect class="box" x="500" y="130" width="240" height="62" rx="6"/>
+    <rect class="box" x="520" y="248" width="220" height="54" rx="6"/>
+    <rect class="hl" x="276" y="256" width="200" height="54" rx="6"/>
+    <rect class="box" x="270" y="250" width="200" height="54" rx="6"/>
+    <path class="ln" d="M340,68 L212,127" marker-end="url(#a9)"/>
+    <path class="ln" d="M440,68 L568,127" marker-end="url(#a9)"/>
+    <path class="ln" d="M640,192 L640,245" marker-end="url(#a9)"/>
+    <path class="ln" d="M200,192 L318,247" marker-end="url(#a9)"/>
+    <path class="ln" d="M540,192 L432,247" marker-end="url(#a9)"/>
+    <path class="ln dash" d="M370,304 L370,326" marker-end="url(#a9)"/>
+  </g>
+  <g>
+    <text class="t" x="390" y="41" text-anchor="middle">page.tsx</text>
+    <text class="s" x="390" y="59" text-anchor="middle">two columns, stacks on phones</text>
+    <text class="s halo" x="390" y="104" text-anchor="middle">renders</text>
+    <text class="t" x="160" y="156" text-anchor="middle">UploadPanel</text>
+    <text class="s" x="160" y="177" text-anchor="middle">files · uploading · docs</text>
+    <text class="t" x="620" y="156" text-anchor="middle">ChatPanel</text>
+    <text class="s" x="620" y="177" text-anchor="middle">messages · input · loading</text>
+    <text class="m halo" x="650" y="224">one per message</text>
+    <text class="t" x="630" y="272" text-anchor="middle">MessageBubble</text>
+    <text class="s" x="630" y="292" text-anchor="middle">answer + Sources</text>
+    <text class="t" x="370" y="274" text-anchor="middle">lib/api.ts</text>
+    <text class="s" x="370" y="294" text-anchor="middle">fetch wrappers</text>
+    <text class="m halo" x="168" y="230" text-anchor="middle">uploadFiles · listDocuments</text>
+    <text class="m halo" x="524" y="232">sendChat</text>
+    <text class="s" x="382" y="340">to FastAPI :8000</text>
+  </g>
+</svg>
+        </div>
+        <figcaption><b>Fig. 10</b> Frontend component tree. All network calls go through <code>lib/api.ts</code>.</figcaption>
+      </figure>
+      <ul class="plain">
+        <li>Client components (<code>"use client"</code>) with Tailwind v4. No extra packages beyond the <code>create-next-app</code> defaults.</li>
+        <li>Plain <code>fetch</code> to <code>NEXT_PUBLIC_API_URL</code> (default <code>http://localhost:8000</code>).</li>
+        <li>Each assistant reply has a collapsible Sources list showing the retrieved chunks.</li>
+      </ul>
+    </section>
+
+    <section id="structure">
+      <h2><span class="num">8</span>Project layout</h2>
+<pre class="code">rag-demo/
+├── docker-compose.yml        pgvector/pgvector:pg16
+├── README.md
+├── docs/DESIGN.md            this document (Markdown + Mermaid)
+├── backend/
+│   ├── requirements.txt
+│   ├── .env.example          OPENAI_API_KEY, DATABASE_URL
+│   ├── sample/sample.md      example handbook to upload
+│   └── app/  config · vectorstore · ingest · rag · main
+└── frontend/
+    ├── lib/api.ts
+    └── app/  page.tsx · components/{UploadPanel, ChatPanel, MessageBubble}.tsx</pre>
+    </section>
+
+    <section id="run">
+      <h2><span class="num">9</span>Run &amp; verify</h2>
+<pre class="code">docker compose up -d
+cd backend &amp;&amp; python3.12 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt &amp;&amp; cp .env.example .env   # add OPENAI_API_KEY
+uvicorn app.main:app --reload                              # :8000, docs at /docs
+cd ../frontend &amp;&amp; npm install &amp;&amp; npm run dev               # :3000</pre>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Check</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /health</code></td><td><code>{"status":"ok"}</code></td></tr>
+          <tr><td>Upload <code>sample/sample.md</code></td><td>Chunk count greater than 0. The file appears under Indexed documents.</td></tr>
+          <tr><td>"How many weeks of parental leave do I get?"</td><td>18 weeks for the primary caregiver and 6 for the secondary, cited as <code>[sample.md]</code></td></tr>
+          <tr><td>"Who won the 2022 World Cup?"</td><td>"I don't know based on the uploaded documents."</td></tr>
+          <tr><td>Upload a <code>.csv</code></td><td><code>400</code> with "only .pdf, .txt and .md are supported."</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="next">
+      <h2><span class="num">10</span>Next steps</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idea</th><th>What it teaches</th></tr></thead>
+        <tbody>
+          <tr><td>Hybrid search (BM25 + vector) and a reranker</td><td>The largest retrieval-quality gain in real systems</td></tr>
+          <tr><td>Agentic RAG: let the agent decide when to retrieve</td><td>CoALA decision procedure instead of a fixed pipeline</td></tr>
+          <tr><td>Persist chat history in Postgres and retrieve it</td><td>Episodic memory alongside semantic memory</td></tr>
+          <tr><td>Streaming answers over SSE</td><td>Responsive UX for long answers</td></tr>
+          <tr><td>Delete and re-index documents, per-user collections</td><td>Memory management and access control</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <footer>rag-demo · design document · source of truth: <code>docs/DESIGN.md</code> in the repository.</footer>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+langchain-core
+langchain-openai
+langchain-postgres
+langchain-text-splitters
+langchain-community
+psycopg[binary]
+pypdf
