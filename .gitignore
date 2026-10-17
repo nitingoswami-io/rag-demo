@@ -1,7 +1,17 @@
+# Secrets: never commit real env files (templates ending in .example are allowed)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Python
 .venv/
 __pycache__/
-.env
-.env.local
+
+# Node / Next.js
 node_modules/
 .next/
+
 .DS_Store

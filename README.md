@@ -56,6 +56,17 @@ curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
 | `frontend/app/components/` | `UploadPanel`, `ChatPanel`, `MessageBubble` |
 | `frontend/lib/api.ts` | `fetch` wrappers for the API |
 
+## Keeping API keys safe
+
+- Your OpenAI key lives only in `backend/.env`, which git ignores, along with every other `.env*` file except the `*.example` templates.
+- The key is used only by the backend. The browser only ever sees `NEXT_PUBLIC_API_URL`, so never put a key in a `NEXT_PUBLIC_*` variable.
+- A pre-commit hook blocks commits that include env files or anything that looks like an API key. Turn it on once per clone:
+  ```bash
+  git config core.hooksPath .githooks
+  ```
+- GitHub secret scanning and push protection are enabled on this repo as a second line of defence.
+- If a key is ever committed, revoke it at https://platform.openai.com/api-keys first. Deleting the commit isn't enough, because the key stays in git history and forks.
+
 ## Reset the index
 
 ```bash
