@@ -90,7 +90,7 @@ curl -X DELETE localhost:8000/documents/notes.md   # removes its chunks from pgv
 | Part | Host | Root directory |
 |---|---|---|
 | Database (Postgres + pgvector) | **Supabase** | n/a |
-| Backend (FastAPI) | **Railway** | `backend/` (uses `backend/railway.json`) |
+| Backend (FastAPI) | **Railway** | `backend/` (start command in `backend/railpack.json`) |
 | Frontend (Next.js) | **Vercel** | `frontend/` |
 
 **1. Supabase.** Create a project. Under **Database → Extensions**, enable `vector`. Under **Connect**, copy the **Session pooler** URI. It's IPv4, port 5432, and works from Railway. Don't use the transaction pooler on port 6543, because it breaks prepared statements. Add `?sslmode=require` to the end.
@@ -105,7 +105,7 @@ TRUST_PROXY=true
 ALLOW_UPLOADS=false
 ```
 
-Then open **Settings → Networking → Generate Domain**. On its first start, the service creates the tables in Supabase and indexes the sample documents. This takes a few seconds and costs a fraction of a cent in embeddings. `/health` is the health check.
+In **Settings**, set the health check path to `/health`, and set Watch Paths to `backend/**` so that frontend-only pushes don't redeploy the backend. Then open **Settings → Networking → Generate Domain**. On its first start, the service creates the tables in Supabase and indexes the sample documents. This takes a few seconds and costs a fraction of a cent in embeddings. `/health` is the health check.
 
 **3. Vercel.** Import the repo and set **Root Directory** to `frontend`. Add `NEXT_PUBLIC_API_URL=https://<your-service>.up.railway.app`, then deploy. If the Vercel URL changes, update `ALLOWED_ORIGINS` on Railway.
 
