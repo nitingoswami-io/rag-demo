@@ -1,14 +1,14 @@
 # RAG Demo
 
-The smallest web app that shows **semantic RAG** end to end: upload documents, then chat with an agent that answers only from them and shows its sources.
+The smallest web app that shows **semantic RAG** end to end. Pick a real-world knowledge base (HR policies, a residential lease, a product manual), ask questions, and get answers grounded in the documents, with a citation for every claim. You can see exactly which passages and database rows each answer came from.
 
 **Stack:** FastAPI · LangChain · PostgreSQL + pgvector · Next.js · OpenAI (`gpt-4o-mini`, `text-embedding-3-small`)
 
 The full design, with hand-drawn architecture and sequence diagrams, is in [docs/DESIGN.md](docs/DESIGN.md) (styled version: [docs/design.html](docs/design.html)). Want to extend it? See [Contributing](#contributing).
 
 ```
-Ingestion:  file → load → chunk (1000/150) → embed → pgvector          (POST /upload)
-Query:      question → embed → top-4 similarity search → prompt → LLM → answer + sources   (POST /chat)
+Ingestion:  file → load → chunk (1000/150) → embed → pgvector          (samples at startup, POST /upload in local mode)
+Query:      question → embed → top-4 search in one knowledge base → prompt → LLM → answer + sources   (POST /chat)
 ```
 
 In CoALA terms, upload is a **learning action** that writes to **semantic memory** (pgvector). Chat is a **retrieval action** that loads chunks into **working memory** (the prompt), which the LLM then reasons over.
@@ -36,27 +36,51 @@ cp .env.local.example .env.local
 npm install && npm run dev
 ```
 
-Upload `backend/sample/sample.md`, then ask *"How many weeks of parental leave do I get?"* To see the grounding rule in action, ask something unrelated: the agent should answer "I don't know based on the uploaded documents."
+On startup the backend indexes the sample documents in `backend/samples/`, which takes a few seconds the first time. After that, unchanged files are skipped. Pick a knowledge base, click a suggested question, then click the answer to inspect it:
+
+| Area | Shows |
+|---|---|
+| Left | Knowledge bases: the problem each one solves, its value, and its documents |
+| Centre | Chat, which scrolls as it grows, with suggested questions |
+| Right | How the answer was built: retrieve, augment and generate, with timings and token counts |
+| Bottom | **Answer sources** (rank, document, page, chunk, similarity, cited) and **Database rows** (a read-only view of `langchain_pg_embedding`) |
+
+To see the grounding rule in action, ask something the documents don't cover. The agent answers "I don't know based on the uploaded documents."
+
+### Demo mode vs local mode
+
+| | Demo mode (default) | Local mode (`ALLOW_UPLOADS=true` in `backend/.env`) |
+|---|---|---|
+| Sample knowledge bases | Read-only | Read-only |
+| Upload and delete your own files | Disabled (`403`) | Yes, in a shared "Your documents" set |
+| Limits | 20 chats per minute per IP | Also 5 files and 5 MB per upload, 10 uploads per minute |
+
+Demo mode is the safe default for anything public. Visitors can't store documents, so there is no user data to protect, and the rate limit caps your OpenAI spend. Only enable uploads on your own machine. In either mode, question text and retrieved passages are sent to OpenAI to generate answers.
 
 ## Try it with curl
 
 ```bash
-curl -F files=@backend/sample/sample.md localhost:8000/upload
-curl localhost:8000/documents
-curl -X DELETE localhost:8000/documents/sample.md   # removes its chunks from pgvector
+curl localhost:8000/packs                       # knowledge bases + documents
+curl localhost:8000/packs/legal/rows            # read-only pgvector rows
 curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
-  -d '{"message":"What is the meal allowance when travelling?","history":[]}'
+  -d '{"message":"Can I keep a dog in the flat?","history":[],"pack":"legal"}'
+
+# Local mode only (ALLOW_UPLOADS=true)
+curl -F files=@notes.md localhost:8000/upload
+curl -X DELETE localhost:8000/documents/notes.md   # removes its chunks from pgvector
 ```
 
 ## Layout
 
 | Path | What it does |
 |---|---|
-| `backend/app/ingest.py` | Load → split → `add_documents` (embeds and stores) |
-| `backend/app/rag.py` | Retrieve top-k → build prompt → `ChatOpenAI` → answer + sources |
-| `backend/app/vectorstore.py` | `PGVector` store and the document list query |
-| `backend/app/main.py` | FastAPI routes: `/upload`, `/documents` (GET, DELETE), `/chat`, `/health` |
-| `frontend/app/components/` | `UploadPanel`, `ChatPanel`, `MessageBubble` |
+| `backend/samples/` | Fictional sample documents and `packs.json` (titles, value, suggested questions) |
+| `backend/app/samples.py` | Indexes the samples at startup (skips unchanged files) |
+| `backend/app/ingest.py` | Load → split → `add_documents` (embeds and stores), de-duplicated by content hash |
+| `backend/app/rag.py` | Retrieve top-k within a pack → build prompt → `ChatOpenAI` → answer, sources with scores, timings |
+| `backend/app/vectorstore.py` | `PGVector` store plus the SQL for documents, rows, de-duplication and delete |
+| `backend/app/main.py` | FastAPI routes: `/config`, `/packs`, `/packs/{id}/rows`, `/chat`, `/upload`, `DELETE /documents/{name}`, `/health`; rate limits |
+| `frontend/app/components/` | `KnowledgeBase`, `ChatPanel`, `InsightPanel`, `EvidencePanel`, `UploadPanel`, `MessageBubble` |
 | `frontend/lib/api.ts` | `fetch` wrappers for the API |
 
 ## Keeping API keys safe

@@ -722,38 +722,51 @@ Context:
 <th>Response</th>
 </tr>
 </thead>
-<tbody><tr>
+<tbody>
+<tr>
 <td class="method">GET</td>
 <td><code>/health</code></td>
 <td>n/a</td>
 <td><code>{&quot;status&quot;:&quot;ok&quot;}</code></td>
 </tr>
 <tr>
-<td class="method">POST</td>
-<td><code>/upload</code></td>
-<td>multipart, field <code>files</code> (1..n)</td>
-<td><code>[{&quot;filename&quot;,&quot;chunks&quot;,&quot;status&quot;}]</code>, status is <code>added</code>, <code>updated</code> or <code>unchanged</code></td>
+<td class="method">GET</td>
+<td><code>/config</code></td>
+<td>n/a</td>
+<td><code>{&quot;allow_uploads&quot;,&quot;chat_model&quot;,&quot;embedding_model&quot;,&quot;top_k&quot;,…}</code></td>
 </tr>
 <tr>
 <td class="method">GET</td>
-<td><code>/documents</code></td>
+<td><code>/packs</code></td>
 <td>n/a</td>
-<td><code>[&quot;a.pdf&quot;, …]</code></td>
+<td><code>[{&quot;id&quot;,&quot;title&quot;,&quot;problem&quot;,&quot;value&quot;,&quot;questions&quot;,&quot;readonly&quot;,&quot;documents&quot;}]</code></td>
 </tr>
 <tr>
-<td class="method">DELETE</td>
-<td><code>/documents/{filename}</code></td>
+<td class="method">GET</td>
+<td><code>/packs/{id}/rows</code></td>
 <td>n/a</td>
-<td><code>{&quot;filename&quot;,&quot;chunks_deleted&quot;}</code>, <code>404</code> if not indexed</td>
+<td><code>{&quot;limit&quot;:100,&quot;rows&quot;:[{&quot;id&quot;,&quot;source&quot;,&quot;page&quot;,&quot;chunk&quot;,&quot;file_hash&quot;,&quot;dims&quot;,&quot;embedding_preview&quot;,&quot;text&quot;}]}</code></td>
 </tr>
 <tr>
 <td class="method">POST</td>
 <td><code>/chat</code></td>
-<td><code>{&quot;message&quot;,&quot;history&quot;:[{&quot;role&quot;,&quot;content&quot;}]}</code></td>
-<td><code>{&quot;answer&quot;,&quot;sources&quot;:[{&quot;source&quot;,&quot;page&quot;,&quot;snippet&quot;}]}</code></td>
+<td><code>{&quot;message&quot;,&quot;pack&quot;,&quot;history&quot;}</code></td>
+<td><code>{&quot;answer&quot;,&quot;sources&quot;:[{&quot;rank&quot;,&quot;source&quot;,&quot;page&quot;,&quot;chunk&quot;,&quot;score&quot;,…}],&quot;stats&quot;:{…}}</code></td>
+</tr>
+<tr>
+<td class="method">POST</td>
+<td><code>/upload</code></td>
+<td>multipart files (1..5), local mode only</td>
+<td><code>[{&quot;filename&quot;,&quot;chunks&quot;,&quot;status&quot;}]</code></td>
+</tr>
+<tr>
+<td class="method">DELETE</td>
+<td><code>/documents/{filename}</code></td>
+<td>n/a, local mode only</td>
+<td><code>{&quot;filename&quot;,&quot;chunks_deleted&quot;}</code></td>
 </tr>
 </tbody></table></div>
-<p>Errors: <code>400</code> for an unsupported file type or an empty message. <code>500</code> with a readable <code>detail</code> for OpenAI or database failures.</p>
+<p>Errors: <code>400</code> for an unsupported file type or an empty message, <code>403</code> for uploads in demo mode or deleting a sample, <code>404</code> for an unknown pack, <code>429</code> when a rate limit is hit. <code>500</code> with a readable <code>detail</code> for OpenAI or database failures.</p>
 
     </section>
 
