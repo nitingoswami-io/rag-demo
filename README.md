@@ -4,7 +4,7 @@ The smallest web app that shows **semantic RAG** end to end: upload documents, t
 
 **Stack:** FastAPI · LangChain · PostgreSQL + pgvector · Next.js · OpenAI (`gpt-4o-mini`, `text-embedding-3-small`)
 
-The full design, with UML diagrams, is in [docs/DESIGN.md](docs/DESIGN.md).
+The full design, with hand-drawn architecture and sequence diagrams, is in [docs/DESIGN.md](docs/DESIGN.md) (styled version: [docs/design.html](docs/design.html)). Want to extend it? See [Contributing](#contributing).
 
 ```
 Ingestion:  file → load → chunk (1000/150) → embed → pgvector          (POST /upload)
@@ -18,6 +18,8 @@ In CoALA terms, upload is a **learning action** that writes to **semantic memory
 Prerequisites: Docker Desktop, Python 3.12, Node 20+, and an OpenAI API key.
 
 ```bash
+git clone https://github.com/nitingoswami-io/rag-demo.git && cd rag-demo
+
 # 1. Database (pgvector)
 docker compose up -d
 
@@ -41,6 +43,7 @@ Upload `backend/sample/sample.md`, then ask *"How many weeks of parental leave d
 ```bash
 curl -F files=@backend/sample/sample.md localhost:8000/upload
 curl localhost:8000/documents
+curl -X DELETE localhost:8000/documents/sample.md   # removes its chunks from pgvector
 curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
   -d '{"message":"What is the meal allowance when travelling?","history":[]}'
 ```
@@ -52,7 +55,7 @@ curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
 | `backend/app/ingest.py` | Load → split → `add_documents` (embeds and stores) |
 | `backend/app/rag.py` | Retrieve top-k → build prompt → `ChatOpenAI` → answer + sources |
 | `backend/app/vectorstore.py` | `PGVector` store and the document list query |
-| `backend/app/main.py` | FastAPI routes: `/upload`, `/documents`, `/chat`, `/health` |
+| `backend/app/main.py` | FastAPI routes: `/upload`, `/documents` (GET, DELETE), `/chat`, `/health` |
 | `frontend/app/components/` | `UploadPanel`, `ChatPanel`, `MessageBubble` |
 | `frontend/lib/api.ts` | `fetch` wrappers for the API |
 
@@ -72,3 +75,7 @@ curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
 ```bash
 docker compose down -v   # deletes the pgvector volume
 ```
+
+## Contributing
+
+Forks and pull requests are welcome. Section 10 of [docs/DESIGN.md](docs/DESIGN.md#10-next-steps) lists extensions (hybrid search, agentic RAG, episodic memory, streaming), each with what it teaches. Read [CONTRIBUTING.md](CONTRIBUTING.md), then [fork the repo](https://github.com/nitingoswami-io/rag-demo/fork) or [open an issue](https://github.com/nitingoswami-io/rag-demo/issues/new).
