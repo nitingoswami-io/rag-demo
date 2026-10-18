@@ -2,6 +2,8 @@
 
 The smallest web app that shows **semantic RAG** end to end. Pick a real-world knowledge base (HR policies, a residential lease, a product manual), ask questions, and get answers grounded in the documents, with a citation for every claim. You can see exactly which passages and database rows each answer came from.
 
+**Try it live:** [rag-demo.nitingoswami.io](https://rag-demo.nitingoswami.io) runs in demo mode: the three sample knowledge bases, no uploads.
+
 **Stack:** FastAPI · LangChain · PostgreSQL + pgvector · Next.js · OpenAI (`gpt-4o-mini`, `text-embedding-3-small`)
 
 The full design, with hand-drawn architecture and sequence diagrams, is in [docs/DESIGN.md](docs/DESIGN.md) (styled version: [docs/design.html](docs/design.html)). Want to extend it? See [Contributing](#contributing).
