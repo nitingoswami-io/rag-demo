@@ -1,72 +1,57 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { deleteDocument, listDocuments, uploadFiles, type UploadResult } from "@/lib/api";
+import { useRef, useState } from "react";
+import { deleteDocument, uploadFiles, type PackDocument, type UploadResult } from "@/lib/api";
 
-export default function UploadPanel() {
+export default function UploadPanel({
+  documents,
+  maxMb,
+  onChanged,
+}: {
+  documents: PackDocument[];
+  maxMb: number;
+  onChanged: () => Promise<void>;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [docs, setDocs] = useState<string[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
   const [results, setResults] = useState<UploadResult[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
-
-  async function refresh() {
-    try {
-      setDocs(await listDocuments());
-    } catch (e) {
-      setError(`Can't reach the backend: ${(e as Error).message}`);
-    }
-  }
-
-  useEffect(() => {
-    listDocuments()
-      .then(setDocs)
-      .catch((e: Error) => setError(`Can't reach the backend: ${e.message}`));
-  }, []);
 
   async function onUpload() {
     if (!files.length) return;
-    setUploading(true);
+    setBusy("upload");
     setError(null);
     setResults([]);
     try {
       setResults(await uploadFiles(files));
       setFiles([]);
       if (inputRef.current) inputRef.current.value = "";
-      await refresh();
+      await onChanged();
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setUploading(false);
+      setBusy(null);
     }
   }
 
   async function onDelete(filename: string) {
     if (!confirm(`Delete ${filename}? Its chunks and embeddings will be removed from the database.`)) return;
-    setDeleting(filename);
+    setBusy(filename);
     setError(null);
     setResults([]);
     try {
       await deleteDocument(filename);
-      await refresh();
+      await onChanged();
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setDeleting(null);
+      setBusy(null);
     }
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-neutral-200 p-5 dark:border-neutral-800">
-      <div>
-        <h2 className="text-lg font-semibold">1. Upload documents</h2>
-        <p className="text-sm text-neutral-500">
-          Files are split into chunks, embedded and stored in pgvector (semantic memory).
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-2">
       <input
         id="files"
         ref={inputRef}
@@ -74,19 +59,19 @@ export default function UploadPanel() {
         multiple
         accept=".pdf,.txt,.md"
         onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-        className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-neutral-100 file:px-3 file:py-2 file:text-sm dark:file:bg-neutral-800 dark:file:text-neutral-100"
+        className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-neutral-200 file:px-2 file:py-1 file:text-xs dark:file:bg-neutral-800 dark:file:text-neutral-100"
       />
-
+      <p className="text-neutral-500">PDF, TXT or MD · up to {maxMb} MB each · max 5 files</p>
       <button
         onClick={onUpload}
-        disabled={!files.length || uploading}
-        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={!files.length || busy !== null}
+        className="rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {uploading ? "Indexing…" : `Upload ${files.length ? `(${files.length})` : ""}`}
+        {busy === "upload" ? "Indexing…" : `Upload ${files.length ? `(${files.length})` : ""}`}
       </button>
 
       {results.length > 0 && (
-        <ul className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+        <ul className="rounded-md bg-emerald-50 p-2 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
           {results.map((r) => (
             <li key={r.filename}>
               {r.filename}:{" "}
@@ -99,39 +84,35 @@ export default function UploadPanel() {
           ))}
         </ul>
       )}
-      {error && (
-        <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </p>
-      )}
+      {error && <p className="rounded-md bg-red-50 p-2 text-red-700 dark:bg-red-950 dark:text-red-200">{error}</p>}
 
-      <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Indexed documents ({docs.length})
-        </h3>
-        {docs.length === 0 ? (
-          <p className="text-sm text-neutral-500">Nothing indexed yet. Try backend/sample/sample.md.</p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {docs.map((d) => (
-              <li
-                key={d}
-                className="flex items-center justify-between gap-2 rounded bg-neutral-100 px-2 py-1 dark:bg-neutral-900"
-              >
-                <span className="truncate">{d}</span>
+      {documents.length === 0 ? (
+        <p className="text-neutral-500">Nothing uploaded yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {documents.map((d) => (
+            <li
+              key={d.filename}
+              className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1 dark:bg-neutral-950"
+            >
+              <span className="truncate" title={d.filename}>
+                {d.filename}
+              </span>
+              <span className="flex shrink-0 items-center gap-1 text-neutral-500">
+                {d.chunks} chunks
                 <button
-                  onClick={() => onDelete(d)}
-                  disabled={deleting !== null}
-                  aria-label={`Delete ${d}`}
-                  className="shrink-0 rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950"
+                  onClick={() => onDelete(d.filename)}
+                  disabled={busy !== null}
+                  aria-label={`Delete ${d.filename}`}
+                  className="rounded px-1.5 py-0.5 text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950"
                 >
-                  {deleting === d ? "Deleting…" : "Delete"}
+                  {busy === d.filename ? "Deleting…" : "Delete"}
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

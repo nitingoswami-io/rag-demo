@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, text
 
 from .config import settings
 
+UPLOADS_PACK = "uploads"
+
 
 @lru_cache
 def get_vector_store() -> PGVector:
@@ -26,67 +28,110 @@ def _engine():
     return create_engine(settings.database_url)
 
 
-_SCOPE = """
+_FROM = """
     FROM langchain_pg_embedding e
     JOIN langchain_pg_collection c ON c.uuid = e.collection_id
-    WHERE c.name = :name AND e.cmetadata->>'source' = :source
+    WHERE c.name = :name
 """
 
 
-def stored_hashes(source: str) -> set[str | None]:
-    """File hashes currently stored for a filename (None for chunks without one)."""
-    get_vector_store()
-    query = text(f"SELECT DISTINCT e.cmetadata->>'file_hash' AS h {_SCOPE}")
+def _rows(sql: str, **params):
+    get_vector_store()  # make sure tables exist
     with _engine().connect() as conn:
-        rows = conn.execute(query, {"name": settings.collection, "source": source})
-        return {r.h for r in rows}
+        return conn.execute(text(sql), {"name": settings.collection, **params}).all()
+
+
+def _write(sql: str, **params) -> int:
+    get_vector_store()
+    with _engine().begin() as conn:
+        return conn.execute(text(sql), {"name": settings.collection, **params}).rowcount
+
+
+def stored_versions(source: str) -> set[tuple[str | None, str | None]]:
+    """(file_hash, pack) pairs currently stored for a filename."""
+    rows = _rows(
+        f"""SELECT DISTINCT e.cmetadata->>'file_hash' AS h, e.cmetadata->>'pack' AS p
+            {_FROM} AND e.cmetadata->>'source' = :source""",
+        source=source,
+    )
+    return {(r.h, r.p) for r in rows}
 
 
 def delete_stale(source: str, keep_hash: str) -> int:
-    """Delete chunks of a filename that belong to an older version. Returns rows deleted."""
-    query = text(
-        """
-        DELETE FROM langchain_pg_embedding e
-        USING langchain_pg_collection c
-        WHERE c.uuid = e.collection_id AND c.name = :name
-          AND e.cmetadata->>'source' = :source
-          AND e.cmetadata->>'file_hash' IS DISTINCT FROM :keep
-        """
+    """Delete chunks of a filename that belong to an older version."""
+    return _write(
+        """DELETE FROM langchain_pg_embedding e USING langchain_pg_collection c
+           WHERE c.uuid = e.collection_id AND c.name = :name
+             AND e.cmetadata->>'source' = :source
+             AND e.cmetadata->>'file_hash' IS DISTINCT FROM :keep""",
+        source=source,
+        keep=keep_hash,
     )
-    with _engine().begin() as conn:
-        result = conn.execute(
-            query, {"name": settings.collection, "source": source, "keep": keep_hash}
-        )
-        return result.rowcount
 
 
 def delete_source(source: str) -> int:
     """Delete every chunk (text + embedding) of a filename. Returns rows deleted."""
-    get_vector_store()
-    query = text(
-        """
-        DELETE FROM langchain_pg_embedding e
-        USING langchain_pg_collection c
-        WHERE c.uuid = e.collection_id AND c.name = :name
-          AND e.cmetadata->>'source' = :source
-        """
+    return _write(
+        """DELETE FROM langchain_pg_embedding e USING langchain_pg_collection c
+           WHERE c.uuid = e.collection_id AND c.name = :name
+             AND e.cmetadata->>'source' = :source""",
+        source=source,
     )
-    with _engine().begin() as conn:
-        return conn.execute(query, {"name": settings.collection, "source": source}).rowcount
 
 
-def list_sources() -> list[str]:
-    """Distinct filenames stored in the collection."""
-    get_vector_store()  # make sure tables exist
-    query = text(
-        """
-        SELECT DISTINCT e.cmetadata->>'source' AS source
-        FROM langchain_pg_embedding e
-        JOIN langchain_pg_collection c ON c.uuid = e.collection_id
-        WHERE c.name = :name
-        ORDER BY source
-        """
+def tag_untagged(pack: str) -> int:
+    """Older chunks have no pack; assign them one so they stay reachable."""
+    return _write(
+        """UPDATE langchain_pg_embedding e SET cmetadata = e.cmetadata || jsonb_build_object('pack', CAST(:pack AS text))
+           FROM langchain_pg_collection c
+           WHERE c.uuid = e.collection_id AND c.name = :name AND e.cmetadata->>'pack' IS NULL""",
+        pack=pack,
     )
-    with _engine().connect() as conn:
-        rows = conn.execute(query, {"name": settings.collection})
-        return [r.source for r in rows if r.source]
+
+
+def pack_documents(pack: str) -> list[dict]:
+    """Documents in a pack with their chunk and page counts."""
+    rows = _rows(
+        f"""SELECT e.cmetadata->>'source' AS source, count(*) AS chunks,
+                   count(DISTINCT e.cmetadata->>'page') AS pages
+            {_FROM} AND e.cmetadata->>'pack' = :pack
+            GROUP BY 1 ORDER BY 1""",
+        pack=pack,
+    )
+    return [{"filename": r.source, "chunks": r.chunks, "pages": r.pages or None} for r in rows]
+
+
+def count_chunks(pack: str) -> int:
+    return _rows(f"SELECT count(*) AS n {_FROM} AND e.cmetadata->>'pack' = :pack", pack=pack)[0].n
+
+
+def pack_rows(pack: str, limit: int) -> list[dict]:
+    """Raw rows of langchain_pg_embedding for one pack (read-only view)."""
+    rows = _rows(
+        f"""SELECT e.id, e.document, e.cmetadata AS meta,
+                   vector_dims(e.embedding) AS dims,
+                   left(e.embedding::text, 120) AS vec
+            {_FROM} AND e.cmetadata->>'pack' = :pack
+            ORDER BY e.cmetadata->>'source', (e.cmetadata->>'page')::int NULLS FIRST,
+                     (e.cmetadata->>'chunk')::int NULLS FIRST
+            LIMIT :limit""",
+        pack=pack,
+        limit=limit,
+    )
+    out = []
+    for r in rows:
+        preview = [round(float(x), 4) for x in r.vec.strip("[]").split(",")[:5] if x.strip()]
+        out.append(
+            {
+                "id": r.id,
+                "source": r.meta.get("source"),
+                "page": r.meta.get("page"),
+                "chunk": r.meta.get("chunk"),
+                "file_hash": (r.meta.get("file_hash") or "")[:12] or None,
+                "chars": len(r.document),
+                "dims": r.dims,
+                "embedding_preview": preview,
+                "text": r.document[:240],
+            }
+        )
+    return out

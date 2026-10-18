@@ -1,0 +1,44 @@
+[
+  {
+    "id": "hr",
+    "title": "HR & Policies",
+    "audience": "Employees and People teams",
+    "problem": "Staff ask HR the same policy questions every day, and the answers are buried in long handbooks.",
+    "value": "Self-service answers around the clock, each with a citation to the exact policy, so HR spends less time on repeat questions.",
+    "files": ["acme-employee-handbook.md", "acme-travel-policy.pdf"],
+    "questions": [
+      "How many days of annual leave do I get, and can I carry any over?",
+      "What is the maximum hotel rate in London?",
+      "Can I fly business class to New York?",
+      "What happens if I submit an expense claim after 60 days?"
+    ]
+  },
+  {
+    "id": "legal",
+    "title": "Contracts & Legal",
+    "audience": "Tenants, landlords and legal teams",
+    "problem": "Contracts are long and dense, and people sign them without knowing their obligations.",
+    "value": "Plain-language answers to contract questions, each pointing to the exact clause and page, so reviews take minutes instead of hours.",
+    "files": ["residential-lease-agreement.pdf"],
+    "questions": [
+      "How much notice do I need to give to leave early?",
+      "Can I keep a dog in the flat?",
+      "How fast must the landlord fix a broken heater?",
+      "By how much can the rent go up each year?"
+    ]
+  },
+  {
+    "id": "support",
+    "title": "Customer Support",
+    "audience": "Customers and support agents",
+    "problem": "Support teams answer the same how-to and warranty questions that the manual already covers.",
+    "value": "Questions get answered straight from the manual and warranty, which reduces support tickets and keeps answers consistent.",
+    "files": ["nimbus-x2-router-manual.md", "nimbus-warranty-and-returns.md"],
+    "questions": [
+      "My router light is solid amber. What should I do?",
+      "How do I factory reset the router?",
+      "How can I extend my warranty to 3 years?",
+      "Can I return an opened router for a refund?"
+    ]
+  }
+]

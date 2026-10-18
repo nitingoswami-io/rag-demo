@@ -9,7 +9,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from .config import settings
-from .vectorstore import delete_stale, get_vector_store, stored_hashes
+from .vectorstore import delete_stale, get_vector_store, stored_versions
 
 SUPPORTED = {".pdf", ".txt", ".md"}
 
@@ -47,22 +47,22 @@ def _file_hash(path: str) -> str:
     return h.hexdigest()
 
 
-def ingest_file(path: str, filename: str) -> tuple[int, str]:
-    """Index one file, de-duplicated by filename + content hash.
+def ingest_file(path: str, filename: str, pack: str) -> tuple[int, str]:
+    """Index one file into a pack, de-duplicated by filename + content hash.
 
     Returns (chunk_count, status) where status is:
-      "unchanged" - same file already indexed; nothing embedded
-      "updated"   - same filename, new content; old chunks replaced
+      "unchanged" - same file already indexed in this pack; nothing embedded
+      "updated"   - same filename, new content (or new pack); old chunks replaced
       "added"     - new filename
     """
     file_hash = _file_hash(path)
-    existing = stored_hashes(filename)
-    if existing == {file_hash}:
+    existing = stored_versions(filename)
+    if existing == {(file_hash, pack)}:
         return 0, "unchanged"
 
     chunks = [c for c in _split(_load(path, filename)) if c.page_content.strip()]
-    for c in chunks:
-        c.metadata["file_hash"] = file_hash
+    for i, c in enumerate(chunks):
+        c.metadata.update(file_hash=file_hash, pack=pack, chunk=i + 1)
 
     if chunks:
         # Stable ids make a retried upload overwrite rows instead of duplicating them.
