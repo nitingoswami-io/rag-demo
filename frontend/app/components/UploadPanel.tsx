@@ -73,7 +73,12 @@ export default function UploadPanel() {
         <ul className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
           {results.map((r) => (
             <li key={r.filename}>
-              {r.filename}: {r.chunks} chunks indexed
+              {r.filename}:{" "}
+              {r.status === "unchanged"
+                ? "already indexed, skipped"
+                : r.status === "updated"
+                  ? `new version, replaced with ${r.chunks} chunks`
+                  : `${r.chunks} chunks indexed`}
             </li>
           ))}
         </ul>

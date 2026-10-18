@@ -3,7 +3,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export type Role = "user" | "assistant";
 export type Source = { source: string | null; page: number | null; snippet: string };
 export type ChatMessage = { role: Role; content: string; sources?: Source[] };
-export type UploadResult = { filename: string; chunks: number };
+export type UploadResult = {
+  filename: string;
+  chunks: number;
+  status: "added" | "updated" | "unchanged";
+};
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {

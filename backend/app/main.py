@@ -46,6 +46,7 @@ class ChatResponse(BaseModel):
 class UploadResult(BaseModel):
     filename: str
     chunks: int
+    status: Literal["added", "updated", "unchanged"]
 
 
 @app.get("/health")
@@ -66,12 +67,12 @@ def upload(files: list[UploadFile] = File(...)):
             tmp.write(f.file.read())
             tmp_path = tmp.name
         try:
-            chunks = ingest_file(tmp_path, f.filename)
+            chunks, status = ingest_file(tmp_path, f.filename)
         except Exception as e:
             raise HTTPException(500, f"Failed to index {f.filename}: {e}") from e
         finally:
             os.unlink(tmp_path)
-        results.append(UploadResult(filename=f.filename, chunks=chunks))
+        results.append(UploadResult(filename=f.filename, chunks=chunks, status=status))
     return results
 
 

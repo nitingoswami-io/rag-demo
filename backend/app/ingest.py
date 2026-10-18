@@ -1,5 +1,7 @@
 """Ingestion pipeline: load -> chunk -> embed -> store (CoALA: learning action)."""
 
+import hashlib
+import uuid
 from pathlib import Path
 
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
@@ -7,7 +9,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from .config import settings
-from .vectorstore import get_vector_store
+from .vectorstore import delete_stale, get_vector_store, stored_hashes
 
 SUPPORTED = {".pdf", ".txt", ".md"}
 
@@ -37,10 +39,39 @@ def _split(docs: list[Document]) -> list[Document]:
     return splitter.split_documents(docs)
 
 
-def ingest_file(path: str, filename: str) -> int:
-    """Index one file into the vector store. Returns the number of chunks."""
+def _file_hash(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 16), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def ingest_file(path: str, filename: str) -> tuple[int, str]:
+    """Index one file, de-duplicated by filename + content hash.
+
+    Returns (chunk_count, status) where status is:
+      "unchanged" - same file already indexed; nothing embedded
+      "updated"   - same filename, new content; old chunks replaced
+      "added"     - new filename
+    """
+    file_hash = _file_hash(path)
+    existing = stored_hashes(filename)
+    if existing == {file_hash}:
+        return 0, "unchanged"
+
     chunks = [c for c in _split(_load(path, filename)) if c.page_content.strip()]
+    for c in chunks:
+        c.metadata["file_hash"] = file_hash
+
     if chunks:
+        # Stable ids make a retried upload overwrite rows instead of duplicating them.
+        ids = [str(uuid.uuid5(uuid.NAMESPACE_URL, f"{filename}:{file_hash}:{i}"))
+               for i in range(len(chunks))]
         # Embedding happens inside add_documents (OpenAI embeddings API).
-        get_vector_store().add_documents(chunks)
-    return len(chunks)
+        get_vector_store().add_documents(chunks, ids=ids)
+
+    # Remove the old version only after the new one is stored.
+    if existing:
+        delete_stale(filename, keep_hash=file_hash)
+    return len(chunks), "updated" if existing else "added"
