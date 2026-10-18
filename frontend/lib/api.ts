@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Trim stray whitespace, commas and slashes so a typo in the env var can't break every request.
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").trim().replace(/[\s,/]+$/, "");
 
 export type Role = "user" | "assistant";
 
