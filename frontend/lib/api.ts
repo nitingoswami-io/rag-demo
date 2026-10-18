@@ -31,6 +31,14 @@ export async function listDocuments(): Promise<string[]> {
   return handle(await fetch(`${API_URL}/documents`));
 }
 
+export async function deleteDocument(
+  filename: string,
+): Promise<{ filename: string; chunks_deleted: number }> {
+  return handle(
+    await fetch(`${API_URL}/documents/${encodeURIComponent(filename)}`, { method: "DELETE" }),
+  );
+}
+
 export async function sendChat(
   message: string,
   history: ChatMessage[],

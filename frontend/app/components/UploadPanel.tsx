@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { listDocuments, uploadFiles, type UploadResult } from "@/lib/api";
+import { deleteDocument, listDocuments, uploadFiles, type UploadResult } from "@/lib/api";
 
 export default function UploadPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -10,6 +10,7 @@ export default function UploadPanel() {
   const [docs, setDocs] = useState<string[]>([]);
   const [results, setResults] = useState<UploadResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -39,6 +40,21 @@ export default function UploadPanel() {
       setError((e as Error).message);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function onDelete(filename: string) {
+    if (!confirm(`Delete ${filename}? Its chunks and embeddings will be removed from the database.`)) return;
+    setDeleting(filename);
+    setError(null);
+    setResults([]);
+    try {
+      await deleteDocument(filename);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -98,8 +114,19 @@ export default function UploadPanel() {
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {docs.map((d) => (
-              <li key={d} className="truncate rounded bg-neutral-100 px-2 py-1 dark:bg-neutral-900">
-                {d}
+              <li
+                key={d}
+                className="flex items-center justify-between gap-2 rounded bg-neutral-100 px-2 py-1 dark:bg-neutral-900"
+              >
+                <span className="truncate">{d}</span>
+                <button
+                  onClick={() => onDelete(d)}
+                  disabled={deleting !== null}
+                  aria-label={`Delete ${d}`}
+                  className="shrink-0 rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  {deleting === d ? "Deleting…" : "Delete"}
+                </button>
               </li>
             ))}
           </ul>

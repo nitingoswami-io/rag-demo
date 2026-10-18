@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from .ingest import SUPPORTED, ingest_file
 from .rag import answer
-from .vectorstore import list_sources
+from .vectorstore import delete_source, list_sources
 
 app = FastAPI(title="RAG Demo API")
 app.add_middleware(
@@ -41,6 +41,11 @@ class Source(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[Source]
+
+
+class DeleteResult(BaseModel):
+    filename: str
+    chunks_deleted: int
 
 
 class UploadResult(BaseModel):
@@ -82,6 +87,17 @@ def documents():
         return list_sources()
     except Exception as e:
         raise HTTPException(500, f"Could not read documents: {e}") from e
+
+
+@app.delete("/documents/{filename}", response_model=DeleteResult)
+def delete_document(filename: str):
+    try:
+        deleted = delete_source(filename)
+    except Exception as e:
+        raise HTTPException(500, f"Could not delete {filename}: {e}") from e
+    if deleted == 0:
+        raise HTTPException(404, f"{filename} is not indexed.")
+    return DeleteResult(filename=filename, chunks_deleted=deleted)
 
 
 @app.post("/chat", response_model=ChatResponse)

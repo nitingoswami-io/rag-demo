@@ -60,6 +60,21 @@ def delete_stale(source: str, keep_hash: str) -> int:
         return result.rowcount
 
 
+def delete_source(source: str) -> int:
+    """Delete every chunk (text + embedding) of a filename. Returns rows deleted."""
+    get_vector_store()
+    query = text(
+        """
+        DELETE FROM langchain_pg_embedding e
+        USING langchain_pg_collection c
+        WHERE c.uuid = e.collection_id AND c.name = :name
+          AND e.cmetadata->>'source' = :source
+        """
+    )
+    with _engine().begin() as conn:
+        return conn.execute(query, {"name": settings.collection, "source": source}).rowcount
+
+
 def list_sources() -> list[str]:
     """Distinct filenames stored in the collection."""
     get_vector_store()  # make sure tables exist
