@@ -83,6 +83,32 @@ curl -X DELETE localhost:8000/documents/notes.md   # removes its chunks from pgv
 | `frontend/app/components/` | `KnowledgeBase`, `ChatPanel`, `InsightPanel`, `EvidencePanel`, `UploadPanel`, `MessageBubble` |
 | `frontend/lib/api.ts` | `fetch` wrappers for the API |
 
+## Deploy (Supabase + Railway + Vercel)
+
+| Part | Host | Root directory |
+|---|---|---|
+| Database (Postgres + pgvector) | **Supabase** | n/a |
+| Backend (FastAPI) | **Railway** | `backend/` (uses `backend/railway.json`) |
+| Frontend (Next.js) | **Vercel** | `frontend/` |
+
+**1. Supabase.** Create a project. Under **Database → Extensions**, enable `vector`. Under **Connect**, copy the **Session pooler** URI. It's IPv4, port 5432, and works from Railway. Don't use the transaction pooler on port 6543, because it breaks prepared statements. Add `?sslmode=require` to the end.
+
+**2. Railway.** Create a service from this GitHub repo, then set **Root Directory** to `backend`. Add these variables:
+
+```
+OPENAI_API_KEY=sk-...                      # only here, never in Vercel
+DATABASE_URL=<Supabase session pooler URI>?sslmode=require
+ALLOWED_ORIGINS=https://<your-app>.vercel.app
+TRUST_PROXY=true
+ALLOW_UPLOADS=false
+```
+
+Then open **Settings → Networking → Generate Domain**. On its first start, the service creates the tables in Supabase and indexes the sample documents. This takes a few seconds and costs a fraction of a cent in embeddings. `/health` is the health check.
+
+**3. Vercel.** Import the repo and set **Root Directory** to `frontend`. Add `NEXT_PUBLIC_API_URL=https://<your-service>.up.railway.app`, then deploy. If the Vercel URL changes, update `ALLOWED_ORIGINS` on Railway.
+
+**4. Cost guard.** Set a monthly budget on the OpenAI key at platform.openai.com. The app also limits chat to 20 requests per minute per visitor and 120 per minute in total (`CHAT_PER_MINUTE`, `GLOBAL_CHAT_PER_MINUTE`).
+
 ## Keeping API keys safe
 
 - Your OpenAI key lives only in `backend/.env`, which git ignores, along with every other `.env*` file except the `*.example` templates.

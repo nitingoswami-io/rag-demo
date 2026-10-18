@@ -31,7 +31,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="RAG Demo API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=list(settings.allowed_origins),
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
@@ -41,15 +41,30 @@ app.add_middleware(
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 
 
-def _rate_limit(request: Request, bucket: str, per_minute: int) -> None:
-    key = (bucket, request.client.host if request.client else "?")
+def _client_ip(request: Request) -> str:
+    if settings.trust_proxy:
+        real = request.headers.get("x-real-ip")
+        if real:
+            return real.strip()
+    return request.client.host if request.client else "?"
+
+
+def _take(key: tuple[str, str], per_minute: int) -> bool:
     now = time.monotonic()
     q = _hits[key]
     while q and now - q[0] > 60:
         q.popleft()
     if len(q) >= per_minute:
-        raise HTTPException(429, f"Too many requests. Limit is {per_minute} per minute.")
+        return False
     q.append(now)
+    return True
+
+
+def _rate_limit(request: Request, bucket: str, per_minute: int) -> None:
+    if not _take((bucket, _client_ip(request)), per_minute):
+        raise HTTPException(429, f"Too many requests. Limit is {per_minute} per minute.")
+    if bucket == "chat" and not _take(("chat", "*all*"), settings.global_chat_per_minute):
+        raise HTTPException(429, "The demo is busy right now. Please try again in a minute.")
 
 
 def _require_uploads() -> None:
