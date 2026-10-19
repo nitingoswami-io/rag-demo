@@ -2,6 +2,14 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "description": "Next.js frontend for the RAG Demo: pick a knowledge base, ask, and inspect the evidence behind each answer.",
+  "license": "MIT",
+  "author": "Nitin Goswami",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nitingoswami-io/rag-demo.git",
+    "directory": "frontend"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

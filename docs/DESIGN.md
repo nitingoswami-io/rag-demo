@@ -8,7 +8,7 @@
 |---|---|---|---|
 | FastAPI · LangChain · pgvector · Next.js | `gpt-4o-mini` · `text-embedding-3-small` | 17 Oct 2026 | Approved · built |
 
-[View code](https://github.com/nitingoswami-io/rag-demo) · [Fork](https://github.com/nitingoswami-io/rag-demo/fork) · [Report an issue](https://github.com/nitingoswami-io/rag-demo/issues/new) · [Contribute](https://github.com/nitingoswami-io/rag-demo/blob/main/CONTRIBUTING.md)
+[Live demo](https://rag-demo.nitingoswami.io) · [View code](https://github.com/nitingoswami-io/rag-demo) · [Fork](https://github.com/nitingoswami-io/rag-demo/fork) · [Report an issue](https://github.com/nitingoswami-io/rag-demo/issues/new) · [Contribute](https://github.com/nitingoswami-io/rag-demo/blob/main/CONTRIBUTING.md)
 
 ---
 
@@ -65,13 +65,17 @@ Authentication, per-user upload isolation, streaming, reranking, hybrid search a
 
 The system has three runtime parts: a Next.js client, a FastAPI service that owns all LangChain logic, and Postgres with the pgvector extension. OpenAI provides the embedding and chat models.
 
-![Fig. 2: Component diagram: the panels, the FastAPI modules, and the chat path to pgvector and OpenAI.](figures/fig-02-components.svg)
+![Fig. 2: Pipeline: sample documents are chunked, embedded and stored at startup; each question retrieves the top four chunks, which the LLM answers from with citations.](figures/fig-02-pipeline.svg)
 
-*Fig. 2: Component diagram: the panels, the FastAPI modules, and the chat path to pgvector and OpenAI.*
+*Fig. 2: Pipeline: sample documents are chunked, embedded and stored at startup; each question retrieves the top four chunks, which the LLM answers from with citations.*
 
-![Fig. 3: Deployment view for local development.](figures/fig-03-deployment.svg)
+![Fig. 3: Component diagram: the panels, the FastAPI modules, and the chat path to pgvector and OpenAI.](figures/fig-03-components.svg)
 
-*Fig. 3: Deployment view for local development.*
+*Fig. 3: Component diagram: the panels, the FastAPI modules, and the chat path to pgvector and OpenAI.*
+
+![Fig. 4: Deployment view for local development.](figures/fig-04-deployment.svg)
+
+*Fig. 4: Deployment view for local development.*
 
 ## 4. Key flows
 
@@ -79,27 +83,27 @@ The system has three runtime parts: a Next.js client, a FastAPI service that own
 
 At startup the backend indexes every sample file; in local mode, uploads take the same path. A file whose hash is already stored in that pack is skipped, so restarts are cheap, and a changed file replaces its old chunks only after the new ones are stored.
 
-![Fig. 4: Sequence: ingestion with de-duplication (CoALA learning action).](figures/fig-04-seq-ingest.svg)
+![Fig. 5: Sequence: ingestion with de-duplication (CoALA learning action).](figures/fig-05-seq-ingest.svg)
 
-*Fig. 4: Sequence: ingestion with de-duplication (CoALA learning action).*
+*Fig. 5: Sequence: ingestion with de-duplication (CoALA learning action).*
 
 ### 4.2 Query: question → retrieve → generate
 
-![Fig. 5: Sequence: one chat turn within a pack (retrieval → working memory → reasoning).](figures/fig-05-seq-query.svg)
+![Fig. 6: Sequence: one chat turn within a pack (retrieval → working memory → reasoning).](figures/fig-06-seq-query.svg)
 
-*Fig. 5: Sequence: one chat turn within a pack (retrieval → working memory → reasoning).*
+*Fig. 6: Sequence: one chat turn within a pack (retrieval → working memory → reasoning).*
 
 ### 4.3 Chat request lifecycle
 
-![Fig. 6: State diagram for the chat panel.](figures/fig-06-state-chat.svg)
+![Fig. 7: State diagram for the chat panel.](figures/fig-07-state-chat.svg)
 
-*Fig. 6: State diagram for the chat panel.*
+*Fig. 7: State diagram for the chat panel.*
 
 ## 5. Backend design
 
-![Fig. 7: Class diagram: Python modules and Pydantic models.](figures/fig-07-classes.svg)
+![Fig. 8: Class diagram: Python modules and Pydantic models.](figures/fig-08-classes.svg)
 
-*Fig. 7: Class diagram: Python modules and Pydantic models.*
+*Fig. 8: Class diagram: Python modules and Pydantic models.*
 
 | File                  | Responsibility                                                                                                                               |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -141,15 +145,15 @@ Errors: `400` for an unsupported file type or an empty message, `403` for upload
 
 `langchain-postgres` creates the `vector` extension and both tables on first use, so no migrations are needed. Each chunk is one row: its text, its 1536-dimension embedding and JSONB metadata. The `pack` key in that metadata is what keeps each knowledge base separate; the evidence panel reads these rows directly.
 
-![Fig. 8: Entity-relationship diagram of the vector store tables.](figures/fig-08-er.svg)
+![Fig. 9: Entity-relationship diagram of the vector store tables.](figures/fig-09-er.svg)
 
-*Fig. 8: Entity-relationship diagram of the vector store tables.*
+*Fig. 9: Entity-relationship diagram of the vector store tables.*
 
 ## 7. Frontend design
 
-![Fig. 9: Frontend component tree.](figures/fig-09-frontend.svg)
+![Fig. 10: Frontend component tree.](figures/fig-10-frontend.svg)
 
-*Fig. 9: Frontend component tree.*
+*Fig. 10: Frontend component tree.*
 
 - A full-page layout: knowledge bases on the left, the chat in the centre, "How this answer was built" on the right, and an evidence panel along the bottom. On mobile the panels stack.
 - Each pack keeps its own chat thread, so switching packs never mixes answers.
@@ -163,7 +167,7 @@ Errors: `400` for an unsupported file type or an empty message, `403` for upload
 rag-demo/
 ├── docker-compose.yml        pgvector/pgvector:pg16
 ├── README.md
-├── docs/DESIGN.md            this document (Markdown + Mermaid)
+├── docs/DESIGN.md            this document (Markdown + hand-drawn SVG figures)
 ├── backend/
 │   ├── requirements.txt
 │   ├── .env.example          OPENAI_API_KEY, DATABASE_URL
