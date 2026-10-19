@@ -151,7 +151,7 @@ export default function ChatPanel({
           <button
             type="submit"
             disabled={!input.trim() || loading || !pack}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="dl-btn dl-btn--primary"
           >
             Send
           </button>

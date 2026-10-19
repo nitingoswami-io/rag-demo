@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { getConfig, listPacks, type ChatMessage, type Config, type Pack } from "@/lib/api";
 import ChatPanel from "./components/ChatPanel";
 import EvidencePanel from "./components/EvidencePanel";
-import Header from "./components/Header";
+import { DemoFooter } from "./components/demo-look";
+import Header, { DESIGN_DOC_URL, REPO_URL } from "./components/Header";
 import InsightPanel from "./components/InsightPanel";
 import KnowledgeBase from "./components/KnowledgeBase";
 
@@ -52,14 +53,14 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-neutral-50 text-neutral-900 lg:h-dvh dark:bg-neutral-950 dark:text-neutral-100">
+    <div className="app-shell flex min-h-dvh flex-col bg-neutral-50 text-neutral-900 lg:h-dvh dark:bg-neutral-950 dark:text-neutral-100">
       <Header config={config} />
       {error && (
-        <p className="mx-3 mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">
+        <p className="mx-4 mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">
           {error}
         </p>
       )}
-      <main className="grid flex-1 gap-3 p-3 lg:min-h-0 lg:grid-cols-[19rem_minmax(0,1fr)_21rem] lg:grid-rows-[minmax(0,1fr)_minmax(0,38%)]">
+      <main className="grid flex-1 gap-3 px-4 py-3 lg:min-h-0 lg:grid-cols-[19rem_minmax(0,1fr)_21rem] lg:grid-rows-[minmax(0,1fr)_minmax(0,38%)]">
         <div className="min-h-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
           <KnowledgeBase
             packs={packs}
@@ -86,6 +87,7 @@ export default function Home() {
           <EvidencePanel message={selectedMessage} packId={packId} dbVersion={dbVersion} />
         </div>
       </main>
+      <DemoFooter name="RAG Demo" repoUrl={REPO_URL} designDocUrl={DESIGN_DOC_URL} />
     </div>
   );
 }

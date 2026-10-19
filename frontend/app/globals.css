@@ -1,26 +1,121 @@
 @import "tailwindcss";
+@import "./demo-look.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/*
+ * The shared "newsroom tool" look (demo-look.css, from the demo-doc skill's
+ * assets/live-demo/). Change colours there, not here.
+ *
+ * The components keep their Tailwind classes. This file remaps Tailwind's
+ * palette onto the paper/ink tokens, so neutral becomes warm paper and ink,
+ * indigo becomes ink (newsprint red is rationed to the primary action), and
+ * emerald / amber / red become the status tokens.
+ *
+ * `dark:` follows the night edition: the system setting, unless the reader
+ * picked an edition with the toggle (data-theme on <html>).
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"] *) {
+    @slot;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+/* Indigo roles differ by edition (light text vs night text), so they get their own tokens. */
+:root {
+  --ix-200: #cfc6b4;
+  --ix-300: #4f4a43;
+  --ix-400: #6f685b;
+  --ix-700: #4f4a43;
+  --ix-900: #141414;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ix-200: #a59d8f;
+    --ix-300: #a59d8f;
+    --ix-400: #a59d8f;
+    --ix-700: #8a8274;
+    --ix-900: #3a3833;
+  }
+}
+:root[data-theme="dark"] {
+  --ix-200: #a59d8f;
+  --ix-300: #a59d8f;
+  --ix-400: #a59d8f;
+  --ix-700: #8a8274;
+  --ix-900: #3a3833;
+}
+
+@theme inline {
+  --font-sans: var(--dl-sans);
+  --font-mono: var(--dl-mono);
+  --font-serif: var(--dl-serif);
+  --font-display: var(--dl-display);
+
+  /* "white" is the panel surface; text-white sits on ink or red fills. */
+  --color-white: var(--surface);
+
+  /* Warm neutrals: paper in the light steps, night paper in the dark steps. */
+  --color-neutral-50: #f6f1e7;
+  --color-neutral-100: #ede6d6;
+  --color-neutral-200: #cfc6b4;
+  --color-neutral-300: #b9b09d;
+  --color-neutral-400: var(--ink-3);
+  --color-neutral-500: var(--ink-3);
+  --color-neutral-600: #4f4a43;
+  --color-neutral-700: #3a3833;
+  --color-neutral-800: #2a2825;
+  --color-neutral-900: #1b1a18;
+  --color-neutral-950: #111110;
+
+  /* Indigo was the old accent; it becomes ink. */
+  --color-indigo-50: var(--paper-2);
+  --color-indigo-200: var(--ix-200);
+  --color-indigo-300: var(--ix-300);
+  --color-indigo-400: var(--ix-400);
+  --color-indigo-500: var(--ink);
+  --color-indigo-600: var(--ink);
+  --color-indigo-700: var(--ix-700);
+  --color-indigo-900: var(--ix-900);
+  --color-indigo-950: var(--paper-2);
+
+  /* Status: always with a label in the UI. */
+  --color-emerald-50: var(--good-soft);
+  --color-emerald-100: var(--good-soft);
+  --color-emerald-200: var(--good);
+  --color-emerald-300: var(--good);
+  --color-emerald-700: var(--good);
+  --color-emerald-800: var(--good);
+  --color-emerald-950: var(--good-soft);
+  --color-amber-100: var(--warn-soft);
+  --color-amber-200: var(--warn);
+  --color-amber-800: var(--warn);
+  --color-amber-950: var(--warn-soft);
+  --color-red-50: var(--bad-soft);
+  --color-red-100: var(--bad-soft);
+  --color-red-200: var(--bad);
+  --color-red-400: var(--bad);
+  --color-red-600: var(--bad);
+  --color-red-700: var(--bad);
+  --color-red-950: var(--bad-soft);
+
+  /* Square corners and no shadows, as on the paper. rounded-full stays round. */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 3px;
+  --shadow-sm: 0 0 #0000;
+}
+
+/* The tool fills the window, so the masthead and footer run full width too. */
+.dl-masthead .dl-wrap,
+.dl-footer .dl-wrap {
+  max-width: none;
+}
+.app-shell .dl-footer {
+  margin-top: 0;
 }
