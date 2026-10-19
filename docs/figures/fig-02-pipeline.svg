@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 480" role="img" aria-label="Pipeline: at startup, sample documents are chunked, embedded with OpenAI and stored in pgvector; for each question, the question is embedded, the four most similar chunks in the chosen knowledge base are retrieved, placed in the prompt with the rules and recent history, and gpt-4o-mini answers with citations; the evidence panels show the sources, scores and database rows behind the answer." class="sketch" font-family="Kalam, 'Segoe Print', 'Comic Sans MS', cursive" font-size="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<style>/* standalone viewing only — stripped when the figure is inlined into a page */
+svg{color:#17202b} .sk-bg{fill:#ffffff} .sk-fill{fill:#e3f2ef} .sk-accent{stroke:#0f766e} text.sk-accent{fill:#0f766e;stroke:none}
+@media (prefers-color-scheme:dark){svg{color:#e4e9ef} .sk-bg{fill:#161d25} .sk-fill{fill:#15302d} .sk-accent{stroke:#4fd1c0} text.sk-accent{fill:#4fd1c0}}
+</style>
+<defs>
+<filter id="rough" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="21" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/></filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1.5 1.5 L8.5 5 L1.5 8.5" fill="none" stroke="currentColor" stroke-width="1.4"/></marker>
+<marker id="arrow-accent" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="sk-accent" d="M1.5 1.5 L8.5 5 L1.5 8.5" fill="none" stroke="currentColor" stroke-width="1.4"/></marker>
+</defs>
+<g filter="url(#rough)">
+  <path d="M20 48 V40 H880 V48" stroke-width="1.1"/>
+  <path d="M20 248 V240 H1020 V248" stroke-width="1.1"/>
+  <rect x="20" y="60" width="150" height="60" rx="6"/>
+  <rect x="210" y="60" width="170" height="60" rx="6"/>
+  <rect x="420" y="60" width="200" height="60" rx="6"/>
+  <rect x="424" y="64" width="192" height="52" rx="3"/>
+  <path class="sk-accent" d="M650.0 62 A90.0 10 0 0 0 830.0 62 A90.0 10 0 0 0 650.0 62 V122 A90.0 10 0 0 0 830.0 122 V62"/>
+  <path d="M170 90 L210 90" marker-end="url(#arrow)"/>
+  <path d="M380 90 L420 90" marker-end="url(#arrow)"/>
+  <path d="M620 90 L650 90" marker-end="url(#arrow)"/>
+  <rect x="20" y="260" width="140" height="60" rx="6"/>
+  <rect x="200" y="260" width="190" height="60" rx="6" class="sk-accent"/>
+  <rect x="430" y="260" width="190" height="60" rx="6" class="sk-accent"/>
+  <rect x="660" y="260" width="170" height="60" rx="6" class="sk-accent"/>
+  <rect x="664" y="264" width="162" height="52" rx="3" class="sk-accent"/>
+  <rect x="870" y="260" width="150" height="60" rx="6" class="sk-accent"/>
+  <path d="M160 290 L200 290" marker-end="url(#arrow)"/>
+  <path d="M300 260 L470 122" marker-end="url(#arrow)"/>
+  <path d="M740 132 L360 260" class="sk-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M390 290 L430 290" class="sk-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M620 290 L660 290" class="sk-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M830 290 L870 290" class="sk-accent" marker-end="url(#arrow-accent)"/>
+  <rect x="20" y="400" width="1000" height="56" rx="6"/>
+  <path d="M945 320 L945 400" marker-end="url(#arrow)"/>
+  <path d="M295 320 L295 400" marker-end="url(#arrow)"/>
+</g>
+<g fill="currentColor" stroke="none">
+  <text x="450" y="32" text-anchor="middle" font-size="12">Ingestion · startup · samples.seed()</text>
+  <text x="110" y="232" text-anchor="middle" font-size="12">Query · POST /chat</text>
+  <text x="95.0" y="87.0" text-anchor="middle">Sample docs</text>
+  <text x="95.0" y="103.0" text-anchor="middle" font-size="11">packs.json + files</text>
+  <text x="295.0" y="87.0" text-anchor="middle">Load + chunk</text>
+  <text x="295.0" y="103.0" text-anchor="middle" font-size="11">1000 chars · 150 overlap</text>
+  <text x="520.0" y="87.0" text-anchor="middle">OpenAI embeddings</text>
+  <text x="520.0" y="103.0" text-anchor="middle" font-size="11">text-embedding-3-small</text>
+  <text x="740" y="92" text-anchor="middle" class="sk-accent">pgvector</text>
+  <text x="740" y="108" text-anchor="middle" font-size="11">chunks + 1536-d vectors</text>
+  <rect class="sk-bg" x="172" y="68" width="35" height="17" rx="3"/>
+  <text x="190" y="80" text-anchor="middle" font-size="12">text</text>
+  <rect class="sk-bg" x="376" y="68" width="48" height="17" rx="3"/>
+  <text x="400" y="80" text-anchor="middle" font-size="12">chunks</text>
+  <rect class="sk-bg" x="614" y="68" width="42" height="17" rx="3"/>
+  <text x="635" y="80" text-anchor="middle" font-size="12">store</text>
+  <text x="90.0" y="287.0" text-anchor="middle">Question</text>
+  <text x="90.0" y="303.0" text-anchor="middle" font-size="11">+ chosen pack</text>
+  <text x="295.0" y="287.0" text-anchor="middle" class="sk-accent">Retrieve</text>
+  <text x="295.0" y="303.0" text-anchor="middle" font-size="11">cosine top-4 · pack filter</text>
+  <text x="525.0" y="287.0" text-anchor="middle" class="sk-accent">Prompt</text>
+  <text x="525.0" y="303.0" text-anchor="middle" font-size="11">rules + chunks + 6 turns</text>
+  <text x="745.0" y="287.0" text-anchor="middle" class="sk-accent">LLM · gpt-4o-mini</text>
+  <text x="745.0" y="303.0" text-anchor="middle" font-size="11">temperature 0</text>
+  <text x="945.0" y="287.0" text-anchor="middle" class="sk-accent">Answer</text>
+  <text x="945.0" y="303.0" text-anchor="middle" font-size="11">cites [file p.N]</text>
+  <rect class="sk-bg" x="166" y="268" width="28" height="17" rx="3"/>
+  <text x="180" y="280" text-anchor="middle" font-size="12">ask</text>
+  <rect class="sk-bg" x="321" y="190" width="102" height="17" rx="3"/>
+  <text x="372" y="202" text-anchor="middle" font-size="12">embed question</text>
+  <rect class="sk-bg" x="500" y="174" width="149" height="17" rx="3"/>
+  <text x="575" y="186" text-anchor="middle" class="sk-accent" font-size="12">top-4 chunks + scores</text>
+  <text x="520.0" y="425.0" text-anchor="middle">Evidence panels</text>
+  <text x="520.0" y="441.0" text-anchor="middle" font-size="11">answer sources: rank · page · similarity · cited · pgvector rows · timings</text>
+  <rect class="sk-bg" x="888" y="350" width="115" height="17" rx="3"/>
+  <text x="945" y="362" text-anchor="middle" font-size="12">answer + sources</text>
+  <rect class="sk-bg" x="238" y="350" width="115" height="17" rx="3"/>
+  <text x="295" y="362" text-anchor="middle" font-size="12">scores · timings</text>
+</g>
+</svg>

@@ -1,19 +1,55 @@
 # RAG Demo
 
-The smallest web app that shows **semantic RAG** end to end. Pick a real-world knowledge base (HR policies, a residential lease, a product manual), ask questions, and get answers grounded in the documents, with a citation for every claim. You can see exactly which passages and database rows each answer came from.
+An open-source, MIT-licensed reference app for **semantic Retrieval-Augmented
+Generation**, end to end. Every answer comes with a citation, and you can see
+exactly which passages, similarity scores and database rows it came from.
 
-**Try it live:** [rag-demo.nitingoswami.io](https://rag-demo.nitingoswami.io) runs in demo mode: the three sample knowledge bases, no uploads.
+The worked example is three small knowledge bases: HR policies, a residential
+lease and a product manual. Pick one, ask a question, then click the answer to
+inspect the evidence behind it.
 
-**Stack:** FastAPI · LangChain · PostgreSQL + pgvector · Next.js · OpenAI (`gpt-4o-mini`, `text-embedding-3-small`)
+It is meant to be read, run and forked. Swap the sample documents in
+`backend/samples/` and the same pipeline answers questions about your own.
 
-The full design, with hand-drawn architecture and sequence diagrams, is in [docs/DESIGN.md](docs/DESIGN.md) (styled version: [docs/design.html](docs/design.html)). Want to extend it? See [Contributing](#contributing).
+> **Status:** learning template and proof of concept. Not hardened for
+> production — see [Known limits](#known-limits).
 
-```
-Ingestion:  file → load → chunk (1000/150) → embed → pgvector          (samples at startup, POST /upload in local mode)
-Query:      question → embed → top-4 search in one knowledge base → prompt → LLM → answer + sources   (POST /chat)
-```
+**Live demo:** [rag-demo.nitingoswami.io](https://rag-demo.nitingoswami.io) runs
+in demo mode: the three sample knowledge bases, no uploads.
 
-In CoALA terms, upload is a **learning action** that writes to **semantic memory** (pgvector). Chat is a **retrieval action** that loads chunks into **working memory** (the prompt), which the LLM then reasons over.
+![Pipeline: sample documents are chunked, embedded and stored in pgvector at startup; each question retrieves the top four chunks in the chosen knowledge base, which gpt-4o-mini answers from with citations.](docs/figures/fig-02-pipeline.svg)
+
+*The pipeline. Ingestion runs once at startup; each question then retrieves the
+four closest chunks, places them in the prompt and answers with citations. The
+teal path is retrieval → prompt → LLM.*
+
+In CoALA terms, ingestion is a **learning action** that writes to **semantic
+memory** (pgvector). Chat is a **retrieval action** that loads chunks into
+**working memory** (the prompt), which the LLM then reasons over.
+
+---
+
+## What you can learn from it
+
+- **Chunking and embedding.** Load, split (1000 characters, 150 overlap) and
+  embed with `text-embedding-3-small`, de-duplicated by content hash, so
+  restarts are cheap. `backend/app/ingest.py`
+- **Scoped retrieval.** Cosine top-4 search filtered to one knowledge base via
+  JSONB metadata, with the similarity score kept for every chunk.
+  `backend/app/rag.py`
+- **A grounding prompt.** The model answers only from retrieved context, cites
+  `[file p.N]`, and says "I don't know based on the uploaded documents" when the
+  answer isn't there. `backend/app/rag.py`
+- **Evidence you can inspect.** Timings, token counts, a sources table and the
+  raw pgvector rows behind each answer. `frontend/app/components/`
+- **A safe public demo.** Uploads off by default, per-IP and global rate limits,
+  and request size limits. `backend/app/main.py`
+
+The full design, with hand-drawn architecture, sequence, state and data
+diagrams, is in **[docs/DESIGN.md](docs/DESIGN.md)** (styled version:
+[docs/design.html](docs/design.html)).
+
+---
 
 ## Quick start
 
@@ -37,6 +73,16 @@ cd ../frontend
 cp .env.local.example .env.local
 npm install && npm run dev
 ```
+
+| Variable | Where | Used for |
+|---|---|---|
+| `OPENAI_API_KEY` | `backend/.env` | Embeddings and chat ([get a key](https://platform.openai.com/api-keys)) |
+| `DATABASE_URL` | `backend/.env` | Postgres with pgvector (the default matches `docker compose`) |
+| `ALLOW_UPLOADS` | `backend/.env` | `true` enables upload and delete (local mode only) |
+| `MAX_UPLOAD_MB`, `CHAT_PER_MINUTE`, `GLOBAL_CHAT_PER_MINUTE` | `backend/.env` | Size and rate limits |
+| `CHAT_MODEL`, `EMBEDDING_MODEL` | `backend/.env` | Optional model overrides (changing the embedding model needs a re-index) |
+| `ALLOWED_ORIGINS`, `TRUST_PROXY` | `backend/.env` | Deployment: CORS origins, and reading the client IP behind a proxy |
+| `NEXT_PUBLIC_API_URL` | `frontend/.env.local` | Where the browser calls the API (default `http://localhost:8000`) |
 
 On startup the backend indexes the sample documents in `backend/samples/`, which takes a few seconds the first time. After that, unchanged files are skipped. Pick a knowledge base, click a suggested question, then click the answer to inspect it:
 
@@ -72,7 +118,17 @@ curl -F files=@notes.md localhost:8000/upload
 curl -X DELETE localhost:8000/documents/notes.md   # removes its chunks from pgvector
 ```
 
-## Layout
+## How it works
+
+```
+Ingestion:  file → load → chunk (1000/150) → embed → pgvector          (samples at startup, POST /upload in local mode)
+Query:      question → embed → top-4 search in one knowledge base → prompt → LLM → answer + sources   (POST /chat)
+```
+
+**Stack:** FastAPI · LangChain · PostgreSQL + pgvector · Next.js · OpenAI
+(`gpt-4o-mini`, `text-embedding-3-small`).
+
+### Where things live
 
 | Path | What it does |
 |---|---|
@@ -85,7 +141,19 @@ curl -X DELETE localhost:8000/documents/notes.md   # removes its chunks from pgv
 | `frontend/app/components/` | `KnowledgeBase`, `ChatPanel`, `InsightPanel`, `EvidencePanel`, `UploadPanel`, `MessageBubble` |
 | `frontend/lib/api.ts` | `fetch` wrappers for the API |
 
-## Deploy (Supabase + Railway + Vercel)
+## Adapting it
+
+| You want to… | Change |
+|---|---|
+| Answer questions about your own documents | Add files and an entry to `backend/samples/packs.json` (title, audience, suggested questions) |
+| Tune retrieval | `chunk_size`, `chunk_overlap`, `top_k`, `history_turns` in `backend/app/config.py` |
+| Change the grounding rules or citation format | The system prompt in `backend/app/rag.py` |
+| Use another chat or embedding model | `CHAT_MODEL` / `EMBEDDING_MODEL`; re-index after changing the embedding model |
+| Use another vector store | `backend/app/vectorstore.py` (LangChain vector store interface) |
+
+---
+
+## Deploying your own copy (Supabase + Railway + Vercel)
 
 | Part | Host | Root directory |
 |---|---|---|
@@ -109,7 +177,18 @@ In **Settings**, set the health check path to `/health`, and set Watch Paths to 
 
 **3. Vercel.** Import the repo and set **Root Directory** to `frontend`. Add `NEXT_PUBLIC_API_URL=https://<your-service>.up.railway.app`, then deploy. If the Vercel URL changes, update `ALLOWED_ORIGINS` on Railway.
 
-**4. Cost guard.** Set a monthly budget on the OpenAI key at platform.openai.com. The app also limits chat to 20 requests per minute per visitor and 120 per minute in total (`CHAT_PER_MINUTE`, `GLOBAL_CHAT_PER_MINUTE`).
+### Running a public demo with a spending limit
+
+Every question spends OpenAI credit, so a public demo needs a ceiling:
+
+1. **Hard cap at the provider.** Use prepaid credit with auto-recharge off, or a
+   monthly budget on the key at platform.openai.com. This bounds the worst case.
+2. **Per-visitor rate limits.** The backend allows 20 chats per minute per IP
+   and 120 per minute in total (`CHAT_PER_MINUTE`, `GLOBAL_CHAT_PER_MINUTE`).
+   The counters are in memory, per process, so run one backend instance or add
+   a limit at your host's firewall too.
+3. **Keep uploads off** (`ALLOW_UPLOADS=false`, the default) so visitors can't
+   store documents or trigger embedding costs.
 
 ## Keeping API keys safe
 
@@ -128,6 +207,23 @@ In **Settings**, set the health check path to `/health`, and set Watch Paths to 
 docker compose down -v   # deletes the pgvector volume
 ```
 
+## Known limits
+
+- **No accounts or per-user isolation.** In local mode, uploads go into one
+  shared "Your documents" set.
+- **Vector search only.** No hybrid (BM25) search or reranker, which are the
+  biggest retrieval-quality gains in real systems.
+- **No streaming.** The answer arrives in one piece.
+- **Chat history lives in the browser** and only the last 6 turns are sent.
+- **Rate limits are in-memory** and per process; they reset on restart.
+
+---
+
 ## Contributing
 
 Forks and pull requests are welcome. Section 10 of [docs/DESIGN.md](docs/DESIGN.md#10-next-steps) lists extensions (hybrid search, agentic RAG, episodic memory, streaming), each with what it teaches. Read [CONTRIBUTING.md](CONTRIBUTING.md), then [fork the repo](https://github.com/nitingoswami-io/rag-demo/fork) or [open an issue](https://github.com/nitingoswami-io/rag-demo/issues/new).
+Questions go in [Discussions](https://github.com/nitingoswami-io/rag-demo/discussions).
+
+## License
+
+[MIT](LICENSE) © 2026 Nitin Goswami
