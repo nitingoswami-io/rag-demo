@@ -12,20 +12,23 @@ UPLOADS_PACK = "uploads"
 
 
 @lru_cache
+def _engine():
+    # One pool for the app and PGVector. pool_pre_ping checks each connection before use,
+    # so connections the server dropped (a Supabase pause/restore, a pooler restart, an
+    # idle timeout) are replaced instead of failing the request with AdminShutdown.
+    return create_engine(settings.database_url, pool_pre_ping=True)
+
+
+@lru_cache
 def get_vector_store() -> PGVector:
     embeddings = OpenAIEmbeddings(model=settings.embedding_model)
     # Creates the `vector` extension and LangChain's tables on first use.
     return PGVector(
         embeddings=embeddings,
         collection_name=settings.collection,
-        connection=settings.database_url,
+        connection=_engine(),
         use_jsonb=True,
     )
-
-
-@lru_cache
-def _engine():
-    return create_engine(settings.database_url)
 
 
 _FROM = """
