@@ -5,12 +5,14 @@ const STEPS = ["Chunk", "Embed", "Store in pgvector", "Retrieve top-k", "Answer 
 
 export const REPO_URL = "https://github.com/nitingoswami-io/rag-demo";
 export const DESIGN_DOC_URL = `${REPO_URL}/blob/main/docs/DESIGN.md`;
+export const POST_URL = "https://www.nitingoswami.io/demos/rag-demo";
 
 /** The shared demo masthead (demo-doc skill, live-demo look). */
 export default function Header({ config }: { config: Config | null }) {
   return (
     <Masthead
       name="RAG Demo"
+      postUrl={POST_URL}
       dek="Ask your documents: answers grounded in a knowledge base, with a citation for every claim."
       stages={STEPS.map((label) => ({ label }))}
       links={[

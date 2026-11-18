@@ -1,10 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getConfig, listPacks, type ChatMessage, type Config, type Pack } from "@/lib/api";
+import { getConfig, listPacks, requestAccess, type ChatMessage, type Config, type Pack } from "@/lib/api";
+import { clearPass, getPass, setPass, takePassFromUrl } from "@/lib/pass-store";
 import ChatPanel from "./components/ChatPanel";
 import EvidencePanel from "./components/EvidencePanel";
-import { DemoFooter } from "./components/demo-look";
+import {
+  AccessDialog,
+  AccessNotice,
+  DemoFooter,
+  readPass,
+  type AccessReason,
+  type PassInfo,
+} from "./components/demo-look";
 import Header, { DESIGN_DOC_URL, REPO_URL } from "./components/Header";
 import InsightPanel from "./components/InsightPanel";
 import KnowledgeBase from "./components/KnowledgeBase";
@@ -17,6 +25,8 @@ export default function Home() {
   const [selected, setSelected] = useState<Record<string, number | null>>({});
   const [dbVersion, setDbVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [pass, setPassInfo] = useState<PassInfo | null>(null);
+  const [accessDialog, setAccessDialog] = useState<AccessReason | null>(null);
 
   const refreshPacks = useCallback(async () => {
     try {
@@ -26,6 +36,37 @@ export default function Home() {
       setError(`Can't reach the backend: ${(e as Error).message}`);
     }
   }, []);
+
+  // A pass arrives on the emailed link (?pass=...) or is already stored from an earlier visit.
+  useEffect(() => {
+    const info = readPass(takePassFromUrl() ?? getPass());
+    if (!info) clearPass();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after mount
+    setPassInfo(info);
+  }, []);
+
+  function openAccess(reason: AccessReason) {
+    if (reason === "access_required") {
+      clearPass();
+      setPassInfo(null);
+    }
+    setAccessDialog(reason);
+  }
+
+  function acceptPass(token: string): boolean {
+    const info = readPass(token);
+    if (!info) return false;
+    setPass(token);
+    setPassInfo(info);
+    return true;
+  }
+
+  function signOut() {
+    clearPass();
+    setPassInfo(null);
+  }
+
+  const gated = Boolean(config?.access_required);
 
   useEffect(() => {
     Promise.all([getConfig(), listPacks()])
@@ -55,6 +96,26 @@ export default function Home() {
   return (
     <div className="app-shell flex min-h-dvh flex-col bg-neutral-50 text-neutral-900 lg:h-dvh dark:bg-neutral-950 dark:text-neutral-100">
       <Header config={config} />
+      {gated && (
+        <AccessNotice
+          providers="OpenAI"
+          pass={pass}
+          repoUrl={REPO_URL}
+          onRequest={() => setAccessDialog("access_required")}
+          onSignOut={signOut}
+        />
+      )}
+      <AccessDialog
+        open={accessDialog !== null}
+        reason={accessDialog ?? "access_required"}
+        demoName="RAG Demo"
+        providers="OpenAI"
+        repoUrl={REPO_URL}
+        passDays={config?.pass_days}
+        onClose={() => setAccessDialog(null)}
+        onRequest={requestAccess}
+        onPass={acceptPass}
+      />
       {error && (
         <p className="mx-4 mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">
           {error}
@@ -78,6 +139,8 @@ export default function Home() {
             selectedIndex={selectedIndex}
             onSelect={(id, i) => setSelected((s) => ({ ...s, [id]: i }))}
             onClear={clearChat}
+            locked={gated && !pass}
+            onAccessNeeded={openAccess}
           />
         </div>
         <div className="min-h-0 lg:col-start-3 lg:row-start-1">

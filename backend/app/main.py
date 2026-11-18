@@ -9,22 +9,27 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
+import openai
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import samples
+from . import access, samples
 from .config import settings
 from .ingest import SUPPORTED, ingest_file
 from .rag import answer
 from .vectorstore import UPLOADS_PACK, delete_source, pack_documents, pack_rows
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("app")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     samples.seed()
+    if access.gate_active() and not settings.resend_api_key:
+        log.warning("DEMO_ACCESS_SECRET is set but RESEND_API_KEY is not: access links go to this log only.")
     yield
 
 
@@ -33,8 +38,20 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.allowed_origins),
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Demo-Pass"],
 )
+
+
+class ApiError(Exception):
+    """An error the frontend can act on: `code` is part of the contract in docs/DEMO_ACCESS.md."""
+
+    def __init__(self, status: int, code: str, message: str):
+        self.status, self.code, self.message = status, code, message
+
+
+@app.exception_handler(ApiError)
+def _api_error(_: Request, e: ApiError):
+    return JSONResponse({"detail": e.message, "code": e.code}, status_code=e.status)
 
 
 # --- Simple in-memory rate limit per client IP (enough for a single-process demo) ---
@@ -62,9 +79,34 @@ def _take(key: tuple[str, str], per_minute: int) -> bool:
 
 def _rate_limit(request: Request, bucket: str, per_minute: int) -> None:
     if not _take((bucket, _client_ip(request)), per_minute):
-        raise HTTPException(429, f"Too many requests. Limit is {per_minute} per minute.")
+        raise ApiError(429, "rate_limited", f"Too many requests. Limit is {per_minute} per minute.")
     if bucket == "chat" and not _take(("chat", "*all*"), settings.global_chat_per_minute):
-        raise HTTPException(429, "The demo is busy right now. Please try again in a minute.")
+        raise ApiError(429, "rate_limited", "The demo is busy right now. Please try again in a minute.")
+
+
+def _require_pass(request: Request) -> None:
+    """When the gate is on, /chat needs a valid pass in X-Demo-Pass (docs/DEMO_ACCESS.md)."""
+    if not access.gate_active():
+        return
+    email = access.verify_pass(request.headers.get("x-demo-pass"))
+    if email is None:
+        raise ApiError(401, "access_required", "The live demo needs an access link. Request one with your email.")
+    if not access.allow_chat(email):
+        raise ApiError(
+            429,
+            "rate_limited",
+            f"You've asked {settings.pass_chats_per_day} questions today, the daily limit for the live demo. "
+            "Come back tomorrow, or run it yourself with your own key.",
+        )
+
+
+def _provider_unavailable(e: Exception) -> bool:
+    """Out of credit, or a dead key: no visitor can fix it, so it becomes demo_unavailable."""
+    if isinstance(e, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        return True
+    return isinstance(e, openai.RateLimitError) and (
+        getattr(e, "code", None) == "insufficient_quota" or "insufficient_quota" in str(e)
+    )
 
 
 def _require_uploads() -> None:
@@ -81,6 +123,12 @@ def _check_pack(pack: str) -> None:
 class Message(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(max_length=4000)
+
+
+class AccessRequest(BaseModel):
+    email: str = Field(max_length=254)
+    reason: Literal["access_required", "demo_unavailable"] = "access_required"
+    website: str = Field(default="", max_length=200)  # honeypot
 
 
 class ChatRequest(BaseModel):
@@ -146,7 +194,25 @@ def config():
         "chunk_size": settings.chunk_size,
         "chunk_overlap": settings.chunk_overlap,
         "top_k": settings.top_k,
+        "access_required": access.gate_active(),
+        "pass_days": settings.demo_pass_days,
     }
+
+
+@app.post("/access/request", status_code=202)
+def request_access(req: AccessRequest, request: Request):
+    """Email an access link. Always 202 for a valid address, so it reveals nothing."""
+    if not access.gate_active():
+        raise ApiError(409, "access_open", "This demo has no access gate; it is already open.")
+    if req.website:
+        return {"ok": True}
+    try:
+        access.request_access(req.email, req.reason, _client_ip(request))
+    except ValueError as e:
+        raise ApiError(400, "invalid_email", str(e)) from e
+    except Exception as e:
+        raise ApiError(502, "email_failed", "Could not send the email right now. Try again in a minute.") from e
+    return {"ok": True}
 
 
 @app.get("/packs")
@@ -231,8 +297,17 @@ def chat(req: ChatRequest, request: Request):
     if not req.message.strip():
         raise HTTPException(400, "Message is empty.")
     _check_pack(req.pack)
+    _require_pass(request)
     _rate_limit(request, "chat", settings.chat_per_minute)
     try:
         return answer(req.message, [m.model_dump() for m in req.history], req.pack)
     except Exception as e:
-        raise HTTPException(500, f"Chat failed: {e}") from e
+        if _provider_unavailable(e):
+            access.alert_unavailable(e)
+            raise ApiError(
+                503, "demo_unavailable", "The live demo is out of API credit right now. Request an access link."
+            ) from e
+        if isinstance(e, openai.RateLimitError):
+            raise ApiError(429, "rate_limited", "The demo is busy right now. Please try again in a minute.") from e
+        log.exception("Chat failed")
+        raise HTTPException(500, "Chat failed. Please try again.") from e

@@ -55,6 +55,19 @@ class Settings:
     )
     # Behind a proxy (Railway), take the client IP from X-Real-IP instead of the socket.
     trust_proxy: bool = _flag("TRUST_PROXY")
+    # Demo access (docs/DEMO_ACCESS.md). Unset secret = no gate. Set it on a public deploy:
+    # /chat then needs a pass, which visitors get by email.
+    demo_access_secret: str = os.getenv("DEMO_ACCESS_SECRET", "")
+    demo_id: str = os.getenv("DEMO_ID", "rag-demo")
+    demo_pass_days: int = int(os.getenv("DEMO_PASS_DAYS", "7"))
+    # Base of the emailed link: the frontend, not this API. Falls back to the first allowed origin.
+    demo_public_url: str = os.getenv("DEMO_PUBLIC_URL", "").strip().rstrip("/")
+    pass_chats_per_day: int = int(os.getenv("PASS_CHATS_PER_DAY", "40"))
+    resend_api_key: str = os.getenv("RESEND_API_KEY", "")
+    access_email_from: str = os.getenv("ACCESS_EMAIL_FROM", "Demo desk <onboarding@resend.dev>")
+    access_notify_email: str = os.getenv("ACCESS_NOTIFY_EMAIL", "")
+    repo_url: str = "https://github.com/nitingoswami-io/rag-demo"
+
     db_view_limit: int = 100
     samples_dir: Path = Path(__file__).resolve().parent.parent / "samples"
 
