@@ -9,3 +9,5 @@ langchain-text-splitters
 langchain-community
 psycopg[binary]
 pypdf
+httpx
+openai

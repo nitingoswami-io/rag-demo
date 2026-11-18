@@ -16,6 +16,9 @@ It is meant to be read, run and forked. Swap the sample documents in
 
 **Live demo:** [rag-demo.nitingoswami.io](https://rag-demo.nitingoswami.io) runs
 in demo mode: the three sample knowledge bases, no uploads.
+Browsing is open. Asking questions spends real OpenAI credit, so the live demo
+asks for your email and sends an access link (7 days). Forks have no gate until
+you set `DEMO_ACCESS_SECRET`; the pattern is in [docs/DEMO_ACCESS.md](docs/DEMO_ACCESS.md).
 
 ![Pipeline: sample documents are chunked, embedded and stored in pgvector at startup; each question retrieves the top four chunks in the chosen knowledge base, which gpt-4o-mini answers from with citations.](docs/figures/fig-02-pipeline.svg)
 

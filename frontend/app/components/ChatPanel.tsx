@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { sendChat, type ChatMessage, type Pack } from "@/lib/api";
+import { ApiError, sendChat, type ChatMessage, type Pack } from "@/lib/api";
+import { isAccessReason, type AccessReason } from "./demo-look";
 import MessageBubble from "./MessageBubble";
 import Panel from "./Panel";
 
@@ -12,6 +13,8 @@ export default function ChatPanel({
   selectedIndex,
   onSelect,
   onClear,
+  locked = false,
+  onAccessNeeded,
 }: {
   pack: Pack | null;
   messages: ChatMessage[];
@@ -19,6 +22,9 @@ export default function ChatPanel({
   selectedIndex: number | null;
   onSelect: (packId: string, i: number) => void;
   onClear: () => void;
+  /** No access pass yet: asking opens the access dialog instead of calling the API. */
+  locked?: boolean;
+  onAccessNeeded: (reason: AccessReason) => void;
 }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,6 +39,11 @@ export default function ChatPanel({
   async function ask(question: string) {
     question = question.trim();
     if (!question || loading || !pack) return;
+    if (locked) {
+      setInput(question);
+      onAccessNeeded("access_required");
+      return;
+    }
     const history = messages;
     const packId = pack.id;
     setMessages(packId, () => [...history, { role: "user", content: question }]);
@@ -47,6 +58,13 @@ export default function ChatPanel({
       ]);
       onSelect(packId, history.length + 1);
     } catch (err) {
+      if (err instanceof ApiError && isAccessReason(err.code)) {
+        // Put the question back so it can be sent again once access is sorted.
+        setMessages(packId, () => history);
+        setInput(question);
+        onAccessNeeded(err.code);
+        return;
+      }
       setError((err as Error).message);
     } finally {
       setLoading(false);

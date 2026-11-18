@@ -1,3 +1,5 @@
+import { getPass } from "./pass-store";
+
 // Trim stray whitespace, commas and slashes so a typo in the env var can't break every request.
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").trim().replace(/[\s,/]+$/, "");
 
@@ -50,6 +52,9 @@ export type Config = {
   chunk_size: number;
   chunk_overlap: number;
   top_k: number;
+  /** True when /chat needs an access pass (docs/DEMO_ACCESS.md). */
+  access_required: boolean;
+  pass_days: number;
 };
 
 export type DbRow = {
@@ -70,14 +75,28 @@ export type UploadResult = {
   status: "added" | "updated" | "unchanged";
 };
 
+/** An API error with the machine-readable `code` from docs/DEMO_ACCESS.md, when there is one. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
+    let code: string | undefined;
     try {
       const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
+      if (typeof body?.detail === "string") detail = body.detail;
+      else if (body?.detail) detail = JSON.stringify(body.detail);
+      if (typeof body?.code === "string") code = body.code;
     } catch {}
-    throw new Error(detail);
+    throw new ApiError(detail, res.status, code);
   }
   return res.json() as Promise<T>;
 }
@@ -108,6 +127,20 @@ export async function deleteDocument(
   );
 }
 
+export async function requestAccess(body: {
+  email: string;
+  reason: "access_required" | "demo_unavailable";
+  website: string;
+}): Promise<void> {
+  await handle(
+    await fetch(`${API_URL}/access/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 export async function sendChat(
   message: string,
   history: ChatMessage[],
@@ -116,7 +149,7 @@ export async function sendChat(
   return handle(
     await fetch(`${API_URL}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...passHeader() },
       body: JSON.stringify({
         message,
         pack,
@@ -124,6 +157,11 @@ export async function sendChat(
       }),
     }),
   );
+}
+
+function passHeader(): Record<string, string> {
+  const pass = getPass();
+  return pass ? { "X-Demo-Pass": pass } : {};
 }
 
 /** True when the answer cites this source, e.g. "[handbook.md]" or "[policy.pdf p.2]". */
